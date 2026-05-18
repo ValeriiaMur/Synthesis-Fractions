@@ -2,22 +2,27 @@
 
 import Link from 'next/link';
 import { IconArrowLeft } from './IconArrowLeft';
-import { IconPause } from './IconPause';
 import { IconSound } from './IconSound';
 
 export type ProgressSegmentStatus = 'idle' | 'active' | 'done';
 
 export type TopBarProps = {
   readonly progress: readonly ProgressSegmentStatus[];
-  readonly onPause?: () => void;
   readonly onToggleSound?: () => void;
+  readonly muted?: boolean;
 };
 
 /**
- * 64px-tall header — pause icon + lesson tag on the left; segmented progress
- * + sound icon on the right.
+ * 64px-tall header — back-to-home link + lesson tag on the left; segmented
+ * progress + mute toggle on the right. Pause was removed at the user's
+ * request — the lesson auto-pauses by virtue of being self-paced (nothing
+ * advances on a timer).
  */
-export function TopBar({ progress, onPause, onToggleSound }: TopBarProps) {
+export function TopBar({
+  progress,
+  onToggleSound,
+  muted = false,
+}: TopBarProps) {
   return (
     <div className="topbar">
       <div className="topbar-side">
@@ -29,15 +34,6 @@ export function TopBar({ progress, onPause, onToggleSound }: TopBarProps) {
         >
           <IconArrowLeft />
         </Link>
-        <button
-          type="button"
-          className="icon-btn"
-          title="Pause"
-          aria-label="Pause"
-          onClick={onPause}
-        >
-          <IconPause />
-        </button>
         <div className="lesson-tag">
           <span className="dot" aria-hidden />
           equivalent fractions · ½ = ²⁄₄
@@ -55,11 +51,12 @@ export function TopBar({ progress, onPause, onToggleSound }: TopBarProps) {
         <button
           type="button"
           className="icon-btn"
-          title="Sound"
-          aria-label="Toggle sound"
+          title={muted ? 'Unmute Ari' : 'Mute Ari'}
+          aria-label={muted ? 'Unmute Ari' : 'Mute Ari'}
+          aria-pressed={muted}
           onClick={onToggleSound}
         >
-          <IconSound />
+          <IconSound muted={muted} />
         </button>
       </div>
     </div>

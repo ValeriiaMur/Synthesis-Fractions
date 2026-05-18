@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { useElementProgress } from '@/hooks/useElementProgress';
 
 export type PrincipleRowProps = {
   readonly idx: number;
@@ -13,10 +20,12 @@ export type PrincipleRowProps = {
 };
 
 /**
- * One full-viewport principle section. Watches itself with an
- * IntersectionObserver; once visible, toggles `.in-view` which drives the
- * ghost-numeral fade-in, the text fade-up, and the demo fade-up (250ms behind
- * the text).
+ * One full-viewport principle section. Two columns: text + demo. The huge
+ * ghost numeral behind the content drifts as the section scrolls past —
+ * `useElementProgress` returns 0..1, we drive transform + opacity from it.
+ *
+ * Section entry (the text + demo fade-up) is still IO-driven via `.in-view`
+ * so the cubic-bezier easing stays purely declarative.
  */
 export function PrincipleRow({
   idx,
@@ -50,6 +59,18 @@ export function PrincipleRow({
     };
   }, []);
 
+  const progress = useElementProgress(ref);
+  /* progress is 0 at first viewport touch → 1 fully past. Map to a
+     -1..1 axis so motion is symmetric around mid-section. */
+  const t = (progress - 0.5) * 2;
+  /* Bell-curve opacity peaks at progress=0.5, max ~0.08 — matches the handoff. */
+  const ghostOpacity = 0.02 + Math.sin(progress * Math.PI) * 0.06;
+  const ghostStyle: CSSProperties = {
+    color,
+    transform: `translateY(${(-50 + t * 18).toFixed(2)}%) translateX(${(reverse ? t * 24 : -t * 24).toFixed(2)}px)`,
+    opacity: ghostOpacity,
+  };
+
   const side = reverse ? 'left' : 'right';
 
   return (
@@ -59,7 +80,7 @@ export function PrincipleRow({
       className={`principle-stage snap ${reverse ? 'reverse' : ''} ${side} ${inView ? 'in-view' : ''}`}
       data-screen-label={`principle ${num}`}
     >
-      <span className="principle-ghost-num" style={{ color }}>
+      <span className="principle-ghost-num" style={ghostStyle}>
         {num}
       </span>
       <div className="inner">

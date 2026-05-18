@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type RefObject,
 } from 'react';
 import type {
@@ -27,6 +28,7 @@ import { fetchAdvanceLine } from '@/lib/agent/advanceClient';
 import { fetchScaffoldedMC } from '@/lib/agent/scaffoldMCClient';
 import { streamChat } from '@/lib/agent/chatClient';
 import type { ManipulativeKind } from '@/lib/agent/lessonAgent';
+import { getVoicePlayer } from '@/lib/voice/voicePlayer';
 import { Stars } from '@/components/space/Stars';
 import { GridBg } from '@/components/space/GridBg';
 import { Doodles } from '@/components/space/Doodles';
@@ -45,9 +47,15 @@ import { PizzaSlicer } from '@/components/manipulatives/PizzaSlicer';
 import { PaperFold } from '@/components/manipulatives/PaperFold';
 import { FractionBox } from '@/components/manipulatives/FractionBox';
 
+import type { PersistedLessonState } from '@/lib/lesson/lessonPersistence';
+import { snapshotLesson, storageKey } from '@/lib/lesson/lessonPersistence';
+
 export type LessonPageProps = {
   readonly lesson: Lesson;
   readonly studentName?: string;
+  /** Optional restore. When provided, the state machine hydrates from it
+   *  instead of starting fresh. */
+  readonly initialState?: PersistedLessonState | null;
 };
 
 type CellStatus = 'locked' | 'active' | 'done';
@@ -120,51 +128,65 @@ function manipulativeKind(beat: Beat): ManipulativeKind | null {
  * background and *swaps* the displayed text only when it resolves under
  * budget. If the network or the model fails, the canonical copy stays put.
  */
-export function LessonPage({ lesson, studentName = 'Ben' }: LessonPageProps) {
+export function LessonPage({
+  lesson,
+  studentName = 'Ben',
+  initialState = null,
+}: LessonPageProps) {
   const beats = lesson.beats;
   const beatCount = beats.length;
 
-  // ---- core lesson state ----
-  const [activeIdx, setActiveIdx] = useState(0);
-  const [doneSet, setDoneSet] = useState<ReadonlySet<BeatId>>(new Set());
-  const [mcSel, setMcSel] = useState<Partial<Record<BeatId, string>>>({});
+  // ---- core lesson state (seeded from initialState when present) ----
+  const [activeIdx, setActiveIdx] = useState(() => initialState?.activeIdx ?? 0);
+  const [doneSet, setDoneSet] = useState<ReadonlySet<BeatId>>(
+    () => new Set(initialState?.doneIds ?? []),
+  );
+  const [mcSel, setMcSel] = useState<Partial<Record<BeatId, string>>>(
+    () => ({ ...(initialState?.mcSel ?? {}) }),
+  );
   const [mcStatus, setMcStatus] = useState<Partial<Record<BeatId, MCStatus>>>(
-    {},
+    () => ({ ...(initialState?.mcStatus ?? {}) }),
   );
   const [hintAttempts, setHintAttempts] = useState<
     Partial<Record<BeatId, number>>
-  >({});
+  >(() => ({ ...(initialState?.hintAttempts ?? {}) }));
   const [manipStates, setManipStates] = useState<
     Partial<Record<BeatId, ManipulativeState>>
-  >({});
+  >(() => ({ ...(initialState?.manipStates ?? {}) }));
 
   // ---- LLM-driven overrides (canonical-first, swap on resolve) ----
   /** Live hint text per beat — overrides the canonical hint when set. */
   const [liveHints, setLiveHints] = useState<
     Partial<Record<BeatId, string>>
-  >({});
+  >(() => ({ ...(initialState?.liveHints ?? {}) }));
   /** Scaffolded MC per beat — overrides `beat.mc` once the learner has hit
    *  SCAFFOLD_THRESHOLD wrong answers on the same beat. */
   const [scaffoldedMC, setScaffoldedMC] = useState<
     Partial<Record<BeatId, MCConfig>>
-  >({});
+  >(() => ({ ...(initialState?.scaffoldedMC ?? {}) }));
 
   // ---- chat state ----
   const [thinking, setThinking] = useState(false);
   /** While Ari is streaming, this holds the accumulating text. Cleared on
    *  stream end, at which point the final text is pushed to `chat`. */
   const [streamingText, setStreamingText] = useState<string | null>(null);
-  const [chat, setChat] = useState<readonly ChatMsg[]>(() => [
-    {
-      from: 'ari',
-      text: `Hi ${studentName} — Ari here, your co-pilot. Skiff's loaded and the moon outpost is waiting.`,
-    },
-    {
-      from: 'ari',
-      text: "Six short stops. Each one's a small fraction puzzle. Take your time — the ship waits for us, not the other way around.",
-    },
-    { from: 'ari', text: stripMarkup(beats[0].prose) },
-  ]);
+  const [chat, setChat] = useState<readonly ChatMsg[]>(() => {
+    if (initialState?.chat && initialState.chat.length > 0) {
+      return initialState.chat.map((m) => ({ from: m.from, text: m.text }));
+    }
+    const activeBeat = beats[initialState?.activeIdx ?? 0];
+    return [
+      {
+        from: 'ari',
+        text: `Hi ${studentName} — Ari here, your co-pilot. Skiff's loaded and the moon outpost is waiting.`,
+      },
+      {
+        from: 'ari',
+        text: "Six short stops. Each one's a small fraction puzzle. Take your time — the ship waits for us, not the other way around.",
+      },
+      { from: 'ari', text: stripMarkup(activeBeat.prose) },
+    ];
+  });
 
   /** Stable cell refs, memoized so they can be safely read during render. */
   const cellRefs = useMemo<readonly RefObject<HTMLDivElement | null>[]>(
@@ -185,10 +207,81 @@ export function LessonPage({ lesson, studentName = 'Ben' }: LessonPageProps) {
   const paraphraseReqRef = useRef<Partial<Record<BeatId, number>>>({});
   const chatReqRef = useRef(0);
 
+  // ---- voice ----
+  // Speak every tutor line as it appears. The voice player no-ops when muted
+  // and de-duplicates identical text via the TTS cache, so the call sites can
+  // fire freely without worrying about repeats.
+  const voice = useMemo(() => getVoicePlayer(), []);
+  const speakAri = useCallback(
+    (text: string) => voice.speak(text),
+    [voice],
+  );
+  const muted = useSyncExternalStore(
+    voice.subscribe,
+    voice.isMuted,
+    () => false,
+  );
+  const toggleMuted = useCallback(
+    () => voice.setMuted(!voice.isMuted()),
+    [voice],
+  );
+
+  // Speak the initial seed messages once on mount.
+  const seededVoiceRef = useRef(false);
+  useEffect(() => {
+    if (seededVoiceRef.current) return;
+    seededVoiceRef.current = true;
+    for (const msg of chatRef.current) {
+      if (msg.from === 'ari') speakAri(msg.text);
+    }
+  }, [speakAri]);
+
+  /** Persist the lesson state on any meaningful change. Skips streamingText
+   *  + thinking (transient). Debounced via a microtask so a single user
+   *  action (which often updates several pieces of state) writes once. */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const id = window.requestAnimationFrame(() => {
+      try {
+        const snap = snapshotLesson(lesson.id, {
+          activeIdx,
+          doneIds: Array.from(doneSet),
+          mcSel,
+          mcStatus,
+          hintAttempts,
+          manipStates,
+          liveHints,
+          scaffoldedMC,
+          chat,
+        });
+        window.localStorage.setItem(
+          storageKey(lesson.id),
+          JSON.stringify(snap),
+        );
+      } catch {
+        // localStorage can throw if disabled / over quota; ignore.
+      }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [
+    lesson.id,
+    activeIdx,
+    doneSet,
+    mcSel,
+    mcStatus,
+    hintAttempts,
+    manipStates,
+    liveHints,
+    scaffoldedMC,
+    chat,
+  ]);
+
   const pushAri = useCallback(
-    (text: string) =>
-      setChat((c) => [...c, { from: 'ari', text } as const]),
-    [],
+    (text: string) => {
+      speakAri(text);
+      setChat((c) => [...c, { from: 'ari', text } as const]);
+    },
+    [speakAri],
   );
   const pushUser = useCallback(
     (text: string) =>
@@ -222,6 +315,7 @@ export function LessonPage({ lesson, studentName = 'Ben' }: LessonPageProps) {
       pushSystem(`▸ cell ${String(next + 1).padStart(2, '0')} unlocked`);
 
       const canonicalProse = stripMarkup(nextBeat.prose);
+      speakAri(canonicalProse);
       // Insert a placeholder ari message for the prose; track its index so
       // fetchParaphrase can swap text in place.
       let proseIndex = -1;
@@ -239,6 +333,7 @@ export function LessonPage({ lesson, studentName = 'Ben' }: LessonPageProps) {
           studentName,
         });
         if (line) {
+          speakAri(line);
           // Splice the advance line BEFORE the canonical prose.
           setChat((c) => {
             if (proseIndex < 0 || proseIndex >= c.length) {
@@ -279,7 +374,7 @@ export function LessonPage({ lesson, studentName = 'Ben' }: LessonPageProps) {
         });
       }, 250);
     },
-    [beatCount, beats, cellRefs, pushSystem, studentName],
+    [beatCount, beats, cellRefs, pushSystem, speakAri, studentName],
   );
 
   const handleManip = useCallback(
@@ -525,7 +620,7 @@ export function LessonPage({ lesson, studentName = 'Ben' }: LessonPageProps) {
       <GridBg />
       <Doodles />
 
-      <TopBar progress={progress} />
+      <TopBar progress={progress} muted={muted} onToggleSound={toggleMuted} />
 
       <div className="stage">
         <ChatRail

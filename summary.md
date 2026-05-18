@@ -56,12 +56,15 @@ and the lesson is fully playable.
 | Var                    | Required? | Used for                                                  |
 | ---------------------- | --------- | --------------------------------------------------------- |
 | `ANTHROPIC_API_KEY`    | yes       | All LLM calls (hint, paraphrase, classify, scaffold, advance, chat). |
+| `ELEVENLABS_API_KEY`   | optional  | Server-side TTS at `/api/tts`. Without it the lesson plays silent. |
 | `LANGSMITH_TRACING`    | optional  | Set `true` to send traces.                                |
 | `LANGSMITH_API_KEY`    | optional  | LangSmith credentials.                                    |
 | `LANGSMITH_PROJECT`    | optional  | LangSmith project name.                                   |
 
 When `ANTHROPIC_API_KEY` is absent the routes return 500 and the lesson
-falls back to canonical authored copy. The lesson stays fully playable.
+falls back to canonical authored copy. When `ELEVENLABS_API_KEY` is absent
+`/api/tts` returns 500 and the voice player silently no-ops; the lesson
+stays fully playable. The lesson stays fully playable.
 
 ## Module layout
 
@@ -78,6 +81,7 @@ src/
       scaffold-mc/route.ts             # POST — blocking, returns 2-option MC
       advance/route.ts                 # POST — blocking, in-world advance line
       chat/route.ts                    # POST — SSE token stream
+    api/tts/route.ts                   # POST — text → audio/mpeg via ElevenLabs
   components/
     space/                   # Stars, GridBg, Doodles (+ 9 doodle icons)
     manipulatives/
@@ -115,6 +119,11 @@ src/
       scaffoldMCClient.ts    # 3-wrong-answers swap
       advanceClient.ts       # in-world advance acknowledgement
       chatClient.ts          # async-generator over SSE tokens
+    voice/
+      elevenLabsClient.ts    # server-side ElevenLabs TTS wrapper (Rachel, eleven_flash_v2_5)
+      ttsClient.ts           # client fetch + in-memory cache (text → Blob)
+      voicePlayer.ts         # singleton queue + mute, factory + getVoicePlayer()
+      playSample.ts          # one-off audio preview for the name-modal sound check
   hooks/
     useParallaxDoodles.ts
 ```
@@ -188,6 +197,57 @@ endpoint, walks `Response.body.getReader()` parsing `data: ` events, and
 yields each token until `[DONE]` or stream close. It never throws — an
 iterator that yields zero tokens is the "no LLM reply, use fallback"
 signal.
+
+## Voice (ElevenLabs TTS)
+
+Tutor lines speak as they appear. Stack:
+
+```
+LessonPage (each ari emission site)
+        │  speakAri(text)
+        ▼
+voicePlayer  (singleton queue, mute-aware)
+        │  fetchAudio(text)
+        ▼
+ttsClient    (in-memory text→Blob cache)
+        │  POST /api/tts { text }
+        ▼
+/api/tts route
+        │  validate text, read ELEVENLABS_API_KEY
+        ▼
+elevenLabsClient.synthesizeSpeech (Rachel · eleven_flash_v2_5)
+        │  audio/mpeg bytes
+        ▼
+HTMLAudio in voicePlayer plays the Blob URL to completion, then dequeues.
+```
+
+Design contract:
+
+- **Gesture-gated.** Before the lesson opens, `NamePrompt` plays a short
+  ElevenLabs greeting via `playSampleVoice("Hi, I'm Ari — can you hear me?")`.
+  The user clicks "I hear it" to confirm. That click is the user gesture that
+  satisfies the browser's autoplay policy, so subsequent in-lesson speech
+  plays without further interaction.
+- **Mute is a hard floor.** When muted, `speak()` is a no-op (no fetch, no
+  play) and the pending queue is dropped. The current line *finishes* — we
+  don't try to interrupt the underlying `<audio>`. Mute is persisted in
+  `localStorage` under `synthesis:voice:muted` and exposed in the lesson
+  TopBar via `IconSound`.
+- **Cache by text.** `ttsClient` keeps a module-level
+  `Map<text, Promise<Blob>>`. Canonical hints and prose play once per page
+  load even when they repeat. Failures aren't cached — a retry can succeed.
+- **No `_cached`-style 304 dance.** The route sets
+  `Cache-Control: private, max-age=86400` so the browser keeps audio across
+  navigations; the in-memory map covers same-page repeats.
+- **LangChain is not involved.** The voice subsystem is independent of
+  Anthropic / the lesson agent. ElevenLabs failures degrade silently:
+  `speak()` swallows fetch + play errors and moves on to the next line.
+
+Call sites in [`LessonPage`](src/components/lesson/LessonPage.tsx) wire
+`speakAri(text)` at every ari emission point: `pushAri`, the canonical-prose
+append in `advanceTo`, and the spliced advance line. The paraphrase
+text-swap deliberately does **not** speak — we already spoke the canonical
+prose at the same index.
 
 ## Lesson state machine (`LessonPage`)
 

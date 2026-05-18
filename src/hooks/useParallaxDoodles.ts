@@ -3,29 +3,49 @@
 import { useEffect } from 'react';
 
 /**
- * On scroll, applies `translate3d(0, scrollY * factor * -1, 0)` to every
- * `[data-parallax]` child of `.doodles`. Factor is the value of the
- * `data-parallax` attribute (e.g. "0.30"). Passive listener for scroll perf.
+ * Global parallax for every `[data-parallax]` element on the page. One rAF
+ * coalesces scroll events so doodles + ghost numerals + ambient glow all
+ * share a single paint frame.
+ *
+ * Each element's `data-parallax` attribute is a factor (e.g. "0.30"); the
+ * applied translate is `-scrollY * factor * 0.25`. The 0.25 damping keeps
+ * the doodles a gentle drift rather than a sudden fly-by — matches the
+ * scrollytelling handoff.
+ *
+ * Respects `prefers-reduced-motion: reduce` and short-circuits the listener.
  */
 export function useParallaxDoodles(): void {
   useEffect(() => {
-    const nodes = document.querySelectorAll<HTMLElement>(
-      '.doodles [data-parallax]',
-    );
-    if (nodes.length === 0) return;
+    if (typeof window === 'undefined') return;
 
-    const onScroll = () => {
+    const reduce = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    )?.matches;
+    if (reduce) return;
+
+    let raf: number | null = null;
+
+    const apply = (): void => {
+      raf = null;
       const y = window.scrollY;
-      nodes.forEach((n) => {
-        const factor = parseFloat(n.dataset.parallax ?? '0');
-        if (Number.isFinite(factor) && factor !== 0) {
-          n.style.transform = `translate3d(0, ${(-y * factor).toFixed(2)}px, 0)`;
-        }
+      const nodes =
+        document.querySelectorAll<HTMLElement>('[data-parallax]');
+      nodes.forEach((el) => {
+        const f = Number.parseFloat(el.dataset.parallax ?? '0');
+        if (!Number.isFinite(f) || f === 0) return;
+        el.style.transform = `translate3d(0, ${(-y * f * 0.25).toFixed(1)}px, 0)`;
       });
     };
 
-    onScroll();
+    const onScroll = (): void => {
+      if (raf == null) raf = window.requestAnimationFrame(apply);
+    };
+
+    apply();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf != null) window.cancelAnimationFrame(raf);
+    };
   }, []);
 }

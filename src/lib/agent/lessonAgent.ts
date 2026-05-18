@@ -11,9 +11,24 @@
 // streaming without graph machinery.
 
 import { Annotation, StateGraph, START, END } from '@langchain/langgraph';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import type { BaseMessage } from '@langchain/core/messages';
 import type { BeatId } from '@/lib/lesson/types';
+import {
+  ADVANCE_FEW_SHOT,
+  ADVANCE_SYSTEM,
+  CHAT_FEW_SHOT,
+  CHAT_SYSTEM,
+  HINT_FEW_SHOT,
+  HINT_SYSTEM,
+  PARAPHRASE_FEW_SHOT,
+  PARAPHRASE_SYSTEM,
+  REFLECTION_FEW_SHOT,
+  REFLECTION_SYSTEM,
+  SCAFFOLD_FEW_SHOT,
+  SCAFFOLD_SYSTEM,
+  type FewShotExample,
+} from './prompts';
 
 export type ManipulativeKind = 'chocolate' | 'pizza' | 'paper' | 'fractionbox';
 
@@ -150,99 +165,31 @@ function extractText(content: InvokeResponse['content']): string {
 }
 
 // ---------------------------------------------------------------------------
-// Node prompts
+// Message construction
+//
+// Each node sends: [SystemMessage(system), ...few-shot Human/AI pairs, HumanMessage(user)]
+// Few-shots live in src/lib/agent/prompts/* alongside the SYSTEM string.
 
-const HINT_SYSTEM = `You are a quiet, observational math tutor for a 7-10 year old learning that 1/2 = 2/4.
+function fewShotMessages(examples: readonly FewShotExample[]): BaseMessage[] {
+  const out: BaseMessage[] = [];
+  for (const ex of examples) {
+    out.push(new HumanMessage(ex.input));
+    out.push(new AIMessage(ex.output));
+  }
+  return out;
+}
 
-A learner has just chosen the wrong answer to a multiple-choice question while a hands-on activity (a chocolate bar, a pizza, a folded paper square, or a row of Lego-style fraction bricks) is on screen in front of them.
-
-Write ONE short hint (one or two sentences, simple vocabulary) that:
-1. Names what the learner is looking at on screen (the specific material).
-2. Redirects them back to that material with a concrete observation or action they can try.
-3. Never reveals the correct answer outright.
-4. Never criticizes the learner or names their wrong choice as wrong.
-
-This is Montessori-style guidance — observational, not evaluative. Strict rules:
-- Do NOT use praise words: "great job", "awesome", "perfect", "amazing", "well done", "good job", "fantastic", "nice".
-- Do NOT use generic encouragement ("you got this", "almost there").
-- Do NOT use exclamation marks for praise. A calm period is fine.
-
-Output ONLY the hint text. No preamble, no quotation marks, no labels.`;
-
-const PARAPHRASE_SYSTEM = `You rewrite one paragraph of narration for a math lesson aimed at a 7-10 year old learning that 1/2 = 2/4. The lesson is framed as a small spaceship delivery story called "the Skiff run" — keep that voice.
-
-You will receive one paragraph. Rewrite it so the wording feels slightly different from the original, but the meaning, the named material, and the action the learner is invited to take are unchanged. The new paragraph must be similar in length and tone.
-
-Strict rules:
-- Keep the same instructions, the same named material, and the same fraction values.
-- One or two short sentences. Simple vocabulary.
-- Calm, observational, picture-book tone. No exclamation marks for emphasis.
-- Do NOT use praise words: "great job", "awesome", "perfect", "amazing", "well done", "good job", "fantastic", "nice".
-- Do NOT add commentary about how easy or fun this is.
-
-Output ONLY the rewritten paragraph. No preamble, no quotation marks, no labels.`;
-
-const REFLECTION_SYSTEM = `You are reading a short written observation from a 7-10 year old in the middle of a fraction-equivalence lesson (1/2 = 2/4). A specific material (a chocolate bar, a pizza, a folded paper square, or a fraction-brick box) is on screen.
-
-Do two things:
-
-1. Classify the observation as exactly one of:
-   - "on-topic": names something true about the material and fractions/equivalence/size
-   - "partial": touches the material but does not connect to fractions or sizes
-   - "off-topic": unrelated to the material or to fractions
-
-2. Write ONE short reaction (one sentence, simple vocabulary) that:
-   - Names what the learner described, in your own words.
-   - Does not praise, evaluate, or judge ("great", "right", "wrong", "good", "perfect", etc. are all forbidden).
-   - Does not correct or extend the math; the material teaches, not you.
-
-Return ONLY a JSON object on a single line, with exactly these fields:
-{"category": "on-topic" | "partial" | "off-topic", "reaction": "..."}
-
-No preamble. No code fences. No extra text.`;
-
-const SCAFFOLD_SYSTEM = `You scaffold a multiple-choice question for a 7-10 year old who has now answered it wrong three times in the same lesson. The on-screen material (chocolate bar, pizza, folded paper, or fraction-brick box) is still in front of them.
-
-You will receive: the original question, the list of options with ids, and which option id is correct. Do two things:
-
-1. Paraphrase the question so it is shorter, more concrete, and points at the on-screen material. One short sentence. Simple vocabulary.
-2. Choose exactly ONE distractor from the original options to keep alongside the correct one. Pick the distractor most likely to be a sincere misconception — not the closest to correct, not the silliest.
-
-Return ONLY a JSON object on a single line, with exactly these fields:
-{"paraphrasedQuestion": "...", "keepOptionId": "<the distractor's id>"}
-
-Strict rules:
-- Do NOT change which option is correct.
-- Do NOT use praise words: "great job", "awesome", "perfect", "amazing", "well done", "good job", "fantastic", "nice".
-- Do NOT include the correct option id in keepOptionId.
-
-No preamble. No code fences. No extra text.`;
-
-const ADVANCE_SYSTEM = `You are Ari, the observational co-pilot in a Montessori-style fraction lesson framed as a small spaceship delivery called "the Skiff run".
-
-A child has just finished one part of the lesson and the next part is opening. Write ONE short line (one sentence, simple vocabulary) acknowledging the move in-world — like "the moon outpost comes into view" or "back on the Skiff, the warp-drive flickers awake".
-
-Strict rules:
-- Address the child as "you", or by name once if you use a name at all.
-- Do NOT use praise: "great job", "awesome", "perfect", "amazing", "well done", "good job", "fantastic", "nice", "you got this".
-- Do NOT explain the math. Do not name the answer.
-- One short sentence. No exclamation marks.
-
-Output ONLY the line. No preamble, no quotation marks, no labels.`;
-
-const CHAT_SYSTEM = `You are Ari, a Montessori-style co-pilot in a short fraction lesson aimed at a 7-10 year old. The lesson is framed as a small spaceship delivery story called "the Skiff run". A specific hands-on activity is on screen.
-
-You are about to reply to a free-form message from the child. Reply in one or two short sentences.
-
-Strict rules:
-- Stay in the cosmos story. Reference the Skiff, the outpost, the warp-drive, or whatever material is on screen.
-- If the child seems stuck or asks for help, redirect them to the on-screen material with a concrete observation or small action — never reveal a multiple-choice answer.
-- If the child asks a math question, answer briefly and point them back to the material.
-- Do NOT praise: "great job", "awesome", "perfect", "amazing", "well done", "good job", "fantastic", "nice", "you got this".
-- Do NOT use exclamation marks for emphasis. A calm period is fine.
-- Stay observational. Name what the child described before responding to it.
-
-Output ONLY the reply. No preamble, no quotation marks, no labels.`;
+function buildMessages(
+  system: string,
+  fewShots: readonly FewShotExample[],
+  user: string,
+): BaseMessage[] {
+  return [
+    new SystemMessage(system),
+    ...fewShotMessages(fewShots),
+    new HumanMessage(user),
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Node implementations
@@ -260,10 +207,9 @@ async function hintNode(
     `Write the hint now.`,
   ].join('\n');
 
-  const response = await llm.invoke([
-    new SystemMessage(HINT_SYSTEM),
-    new HumanMessage(user),
-  ]);
+  const response = await llm.invoke(
+    buildMessages(HINT_SYSTEM, HINT_FEW_SHOT, user),
+  );
   const text = extractText(response.content).trim();
   if (!text) throw new Error('hintNode: empty model response');
   assertNoPraise(text, 'hintNode');
@@ -281,10 +227,9 @@ async function paraphraseNode(
     `Rewrite the paragraph now.`,
   ].join('\n');
 
-  const response = await llm.invoke([
-    new SystemMessage(PARAPHRASE_SYSTEM),
-    new HumanMessage(user),
-  ]);
+  const response = await llm.invoke(
+    buildMessages(PARAPHRASE_SYSTEM, PARAPHRASE_FEW_SHOT, user),
+  );
   const text = extractText(response.content).trim();
   if (!text) throw new Error('paraphraseNode: empty model response');
   assertNoPraise(text, 'paraphraseNode');
@@ -338,10 +283,9 @@ async function reflectionNode(
     `Return the JSON now.`,
   ].join('\n');
 
-  const response = await llm.invoke([
-    new SystemMessage(REFLECTION_SYSTEM),
-    new HumanMessage(user),
-  ]);
+  const response = await llm.invoke(
+    buildMessages(REFLECTION_SYSTEM, REFLECTION_FEW_SHOT, user),
+  );
   const raw = extractText(response.content);
   const { category, reaction } = parseReflectionJSON(raw);
   assertNoPraise(reaction, 'reflectionNode');
@@ -406,10 +350,9 @@ async function scaffoldMCNode(
     `Return the JSON now.`,
   ].join('\n');
 
-  const response = await llm.invoke([
-    new SystemMessage(SCAFFOLD_SYSTEM),
-    new HumanMessage(user),
-  ]);
+  const response = await llm.invoke(
+    buildMessages(SCAFFOLD_SYSTEM, SCAFFOLD_FEW_SHOT, user),
+  );
   const raw = extractText(response.content);
   const validIds = new Set(payload.options.map((o) => o.id));
   const { paraphrasedQuestion, keepOptionId } = parseScaffoldJSON(
@@ -438,10 +381,9 @@ async function advanceNode(
     `Write the in-world acknowledgement now.`,
   ].join('\n');
 
-  const response = await llm.invoke([
-    new SystemMessage(ADVANCE_SYSTEM),
-    new HumanMessage(user),
-  ]);
+  const response = await llm.invoke(
+    buildMessages(ADVANCE_SYSTEM, ADVANCE_FEW_SHOT, user),
+  );
   const text = extractText(response.content).trim();
   if (!text) throw new Error('advanceNode: empty model response');
   assertNoPraise(text, 'advanceNode');
@@ -481,7 +423,11 @@ export function buildChatMessages(payload: ChatPayload): BaseMessage[] {
     `Write Ari's reply now.`,
   ].join('\n\n');
 
-  return [new SystemMessage(CHAT_SYSTEM), new HumanMessage(user)];
+  return [
+    new SystemMessage(CHAT_SYSTEM),
+    ...fewShotMessages(CHAT_FEW_SHOT),
+    new HumanMessage(user),
+  ];
 }
 
 async function chatNode(

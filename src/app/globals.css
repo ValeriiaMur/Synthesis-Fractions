@@ -100,6 +100,80 @@ input {
   opacity: 0.7;
 }
 
+
+/* ----------- scroll-down invite (hero) ----------- */
+.scroll-down {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-mute);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.25s ease;
+  z-index: 5;
+}
+
+.scroll-down:hover,
+.scroll-down:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.scroll-down-label {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.scroll-down-chevron {
+  display: inline-flex;
+  animation: scroll-down-bounce 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes scroll-down-bounce {
+  0%,
+  100% {
+    transform: translateY(-4px);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateY(4px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-down-chevron {
+    animation: none !important;
+    transform: none !important;
+    opacity: 0.8;
+  }
+}
+
+/* Per-star twinkle. Each <circle class="star-dot"> exposes its base
+   opacity as the CSS custom property `--o` and its cycle as `--dur`; the
+   keyframe oscillates opacity between ~35% and 100% of that base. */
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: calc(var(--o, 0.6) * 0.35);
+  }
+  50% {
+    opacity: var(--o, 0.6);
+  }
+}
+
+.star-dot {
+  opacity: var(--o, 0.6);
+  animation: star-twinkle var(--dur, 4s) ease-in-out infinite;
+}
+
 .doodles {
   position: absolute;
   inset: 0;
@@ -109,6 +183,57 @@ input {
 .doodles svg {
   position: absolute;
   opacity: 0.85;
+}
+
+/* ----------- one-pager backdrop locking -----------
+   When the cosmos backdrop is rendered inside the scrollytelling page,
+   every ambient layer is locked to the viewport so the scene feels
+   continuous instead of stacked. Lesson uses position:absolute (the
+   .lesson-app frame is itself fixed-size). */
+.page .grid-bg,
+.page .stars-layer,
+.page .doodles {
+  position: fixed;
+}
+
+.page .grid-bg {
+  z-index: 0;
+}
+.page .stars-layer {
+  z-index: 1;
+}
+.page .doodles {
+  z-index: 2;
+}
+
+/* Doodle wrapper spans.
+   Each doodle is `<span data-parallax><span data-slide-drift><svg .../></span></span>`.
+   The SVG inside uses `position: absolute; left: X%; top: Y%` to place
+   itself across the viewport. The SVG's percentages must resolve against
+   the FULL viewport, not against its zero-sized inline parent.
+   Per CSS spec, an element with a non-`none` transform creates a
+   containing block for its absolutely-positioned descendants — so as soon
+   as the parallax or drift transform fires, the SVG starts using the
+   wrapper span as its containing block. We therefore need the wrappers
+   themselves to be positioned + sized to the viewport so percentages
+   resolve correctly. */
+[data-parallax] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Inner per-slide drift wrapper. The outer [data-parallax] carries the
+   scroll-driven transform with no transition; this inner span carries the
+   small per-slide nudge so we can spring it independently when the active
+   principle changes. */
+[data-slide-drift] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+  transition: transform 700ms cubic-bezier(0.4, 1.4, 0.4, 1);
 }
 
 /* ----------- lesson app frame ----------- */
@@ -929,15 +1054,24 @@ html.snap-scroll {
   .principle-num-row,
   .principle-stage h3,
   .principle-stage .body,
-  .principle-demo,
-  .principle-ghost-num {
+  .principle-demo {
     animation: none !important;
     transition: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
-  .principle-stage.in-view .principle-ghost-num {
-    opacity: 0.06 !important;
+  /* Doodles should sit still under reduced-motion — the parallax + drift
+     hooks already short-circuit, but be explicit in CSS too. */
+  [data-parallax],
+  [data-slide-drift] {
+    transform: none !important;
+    transition: none !important;
+  }
+  /* Ghost numeral: render statically centered with a small fallback opacity. */
+  .principle-ghost-num {
+    transform: translateY(-50%) !important;
+    opacity: 0.05 !important;
+    transition: none !important;
   }
 }
 
@@ -1223,15 +1357,16 @@ html.snap-scroll {
   font-size: clamp(380px, 56vw, 720px);
   line-height: 0.8;
   letter-spacing: -0.06em;
+  /* Default state for SSR + the moment before useElementProgress fires.
+     The hook overwrites transform + opacity inline once mounted. */
   opacity: 0;
   z-index: 0;
   pointer-events: none;
   font-variant-numeric: tabular-nums;
-  transition:
-    opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
-  transform: translateY(-50%) translateX(-30px);
+  transform: translateY(-50%);
   white-space: nowrap;
+  will-change: transform, opacity;
+  transition: opacity 0.8s ease;
 }
 
 .principle-stage.right .principle-ghost-num {
@@ -1240,11 +1375,6 @@ html.snap-scroll {
 
 .principle-stage.left .principle-ghost-num {
   left: -60px;
-}
-
-.principle-stage.in-view .principle-ghost-num {
-  opacity: 0.06;
-  transform: translateY(-50%) translateX(0);
 }
 
 .principle-text,
@@ -1341,6 +1471,19 @@ html.snap-scroll {
   align-items: flex-end;
   gap: 14px;
   padding: 8px 0;
+  opacity: 1;
+  transition:
+    opacity 0.45s ease,
+    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Hidden while the visitor is still on the hero — the rail is only
+   meaningful once a principle is in scope. Fades out + slides slightly
+   off-screen so it stays out of the keyboard tab order. */
+.side-rail.is-hidden {
+  opacity: 0;
+  transform: translate(16px, -50%);
+  pointer-events: none;
 }
 
 .side-rail a {
@@ -1582,6 +1725,63 @@ html.snap-scroll {
   display: block;
 }
 
+.name-prompt-audio-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  margin: 4px 0 4px;
+}
+
+.name-prompt-audio-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.name-prompt-audio-status {
+  font-family: var(--font-jetbrains-mono), JetBrains Mono, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.name-prompt-audio-ok {
+  color: #5fd897;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.name-prompt-audio-check .btn-primary {
+  padding: 8px 16px;
+  margin: 0;
+  align-self: auto;
+}
+
 .name-prompt-field input {
   width: 100%;
   height: 56px;
@@ -1594,6 +1794,11 @@ html.snap-scroll {
   font-family: inherit;
   color: var(--ink);
   transition: border-color 0.2s, background 0.2s;
+}
+
+.name-prompt-field input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .name-prompt-field input::placeholder {

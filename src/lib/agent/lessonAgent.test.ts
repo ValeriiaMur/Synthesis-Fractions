@@ -232,10 +232,11 @@ describe('runLessonAgent — chat (blocking fallback path)', () => {
 });
 
 describe('buildChatMessages', () => {
-  it('includes the student name, current beat prose, and recent chat', () => {
+  it('includes the student name, current beat prose, and recent chat in the final human message', () => {
     const messages = buildChatMessages(chatInput.payload);
-    expect(messages).toHaveLength(2);
-    const human = messages[1].content as string;
+    // [System, ...few-shot Human/AI pairs, Human(actual user message)]
+    expect(messages.length).toBeGreaterThanOrEqual(2);
+    const human = messages[messages.length - 1].content as string;
     expect(human).toContain('Ben');
     expect(human).toContain('Here is a chocolate bar.');
     expect(human).toContain("i'm stuck");
@@ -252,7 +253,7 @@ describe('buildChatMessages', () => {
       manipulativeKind: null,
       recentChat: [],
     });
-    const human = messages[1].content as string;
+    const human = messages[messages.length - 1].content as string;
     expect(human).toContain('No active beat yet.');
     expect(human).toContain('(no recent chat)');
   });

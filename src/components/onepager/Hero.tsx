@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { HeroPreview } from './HeroPreview';
+import { ScrollDownInvite } from './ScrollDownInvite';
 
 /**
  * Full-viewport hero — title, supporting copy, primary + secondary actions,
- * and the live mini-chocolate-bar preview underneath.
+ * the live mini chocolate-bar preview, and a pulsing scroll affordance
+ * pinned at the bottom that invites the visitor down.
  */
 export function Hero() {
   return (
@@ -36,6 +38,7 @@ export function Hero() {
         </div>
         <HeroPreview />
       </div>
+      <ScrollDownInvite href="#principles" />
     </section>
   );
 }

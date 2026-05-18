@@ -1,10 +1,17 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { LessonPage } from '@/components/lesson/LessonPage';
 import { NamePrompt } from '@/components/lesson/NamePrompt';
+import { ResumePrompt } from '@/components/lesson/ResumePrompt';
 import { lesson } from '@/lib/lesson/lessonData';
 import { titleCaseName } from '@/lib/lesson/titleCaseName';
+import {
+  decodeLessonState,
+  hasMeaningfulProgress,
+  storageKey,
+  type PersistedLessonState,
+} from '@/lib/lesson/lessonPersistence';
 
 const NAME_KEY = 'synthesis:lesson:studentName';
 const NAME_EVENT = 'synthesis:lesson:name-set';
@@ -29,24 +36,68 @@ function subscribe(callback: () => void): () => void {
   };
 }
 
-export default function LessonRoute() {
-  const name = useSyncExternalStore(
-    subscribe,
-    readName,
-    () => null,
-  );
+type ResumeStatus =
+  | { readonly kind: 'pending'; readonly saved: PersistedLessonState }
+  | { readonly kind: 'resume'; readonly saved: PersistedLessonState }
+  | { readonly kind: 'fresh' };
 
-  const handleSubmit = (value: string) => {
+function initialResumeStatus(): ResumeStatus {
+  if (typeof window === 'undefined') return { kind: 'fresh' };
+  try {
+    const saved = decodeLessonState(
+      window.localStorage.getItem(storageKey(lesson.id)),
+      lesson.id,
+    );
+    if (saved && hasMeaningfulProgress(saved)) {
+      return { kind: 'pending', saved };
+    }
+  } catch {
+    // localStorage unavailable — start fresh.
+  }
+  return { kind: 'fresh' };
+}
+
+export default function LessonRoute() {
+  const name = useSyncExternalStore(subscribe, readName, () => null);
+  const [resume, setResume] = useState<ResumeStatus>(initialResumeStatus);
+
+  const handleSubmitName = (value: string) => {
     const normalized = titleCaseName(value);
     if (!normalized) return;
     try {
       window.localStorage.setItem(NAME_KEY, normalized);
     } catch {
-      // localStorage may be unavailable; fall through to in-memory state via the event.
+      // ignore — fall through to in-memory state via the event.
     }
     window.dispatchEvent(new Event(NAME_EVENT));
   };
 
-  if (!name) return <NamePrompt onSubmit={handleSubmit} />;
-  return <LessonPage lesson={lesson} studentName={name} />;
+  if (!name) return <NamePrompt onSubmit={handleSubmitName} />;
+
+  if (resume.kind === 'pending') {
+    return (
+      <ResumePrompt
+        studentName={name}
+        activeBeatNumber={resume.saved.activeIdx + 1}
+        totalBeats={lesson.beats.length}
+        onResume={() => setResume({ kind: 'resume', saved: resume.saved })}
+        onStartOver={() => {
+          try {
+            window.localStorage.removeItem(storageKey(lesson.id));
+          } catch {
+            // ignore — start fresh in-memory anyway.
+          }
+          setResume({ kind: 'fresh' });
+        }}
+      />
+    );
+  }
+
+  return (
+    <LessonPage
+      lesson={lesson}
+      studentName={name}
+      initialState={resume.kind === 'resume' ? resume.saved : null}
+    />
+  );
 }

@@ -27,19 +27,22 @@ describe('generateHint (LangGraph node)', () => {
     const llm = llmReturning('Look at the chocolate bar.');
     await generateHint(baseInput, { llm });
     const messages = (llm.invoke as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(messages).toHaveLength(2);
+    // Few-shot examples sit between system + the live user message, so the
+    // message list is `[System, ...few-shot Human/AI pairs, Human]`.
+    expect(messages.length).toBeGreaterThanOrEqual(2);
     expect(messages[0]).toBeInstanceOf(SystemMessage);
     const system = String(messages[0].content).toLowerCase();
     expect(system).toContain('great job');
     expect(system).toMatch(/redirect.*material|name what.*looking at|observ/);
   });
 
-  it('invokes the model with a HumanMessage containing the activity, wrong choice, and attempt', async () => {
+  it('invokes the model with a final HumanMessage containing the activity, wrong choice, and attempt', async () => {
     const llm = llmReturning('Look at the chocolate bar.');
     await generateHint(baseInput, { llm });
     const messages = (llm.invoke as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(messages[1]).toBeInstanceOf(HumanMessage);
-    const user = String(messages[1].content);
+    const last = messages[messages.length - 1];
+    expect(last).toBeInstanceOf(HumanMessage);
+    const user = String(last.content);
     expect(user).toContain('chocolate');
     expect(user).toContain('Three');
     expect(user).toContain('1');

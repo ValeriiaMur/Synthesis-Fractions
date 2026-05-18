@@ -1,12 +1,19 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { Stars } from '@/components/space/Stars';
 import { GridBg } from '@/components/space/GridBg';
 import { Doodles } from '@/components/space/Doodles';
 import { useParallaxDoodles } from '@/hooks/useParallaxDoodles';
+import { useSlideDrift } from '@/hooks/useSlideDrift';
+import {
+  useActivePrinciple,
+  type ActivePrincipleInput,
+} from '@/hooks/useActivePrinciple';
+import { AmbientGlow } from './AmbientGlow';
 import { Hero } from './Hero';
 import { ScrollProgress } from './ScrollProgress';
+import { ScrollDownInvite } from './ScrollDownInvite';
 import { SideRail, type PrincipleNav } from './SideRail';
 import { PrincipleRow } from './PrincipleRow';
 import { FinalCTA } from './FinalCTA';
@@ -99,6 +106,14 @@ const PRINCIPLES: readonly Principle[] = [
 export function HowItWorksPage() {
   useParallaxDoodles();
 
+  /** Trimmed-down input for the active-principle hook — derived once. */
+  const activeInputs = useMemo<readonly ActivePrincipleInput[]>(
+    () => PRINCIPLES.map((p) => ({ num: p.num, color: p.color })),
+    [],
+  );
+  const active = useActivePrinciple(activeInputs);
+  useSlideDrift(active.idx);
+
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('snap-scroll');
@@ -109,9 +124,10 @@ export function HowItWorksPage() {
 
   return (
     <div className="page cosmos-bg">
-      <Stars count={120} />
       <GridBg large />
+      <Stars count={120} />
       <Doodles />
+      <AmbientGlow color={active.color} />
 
       <ScrollProgress />
 
@@ -133,6 +149,7 @@ export function HowItWorksPage() {
           Each principle below is interactive — toggle, drag, or scroll to see
           how it lands in our lesson.
         </p>
+        <ScrollDownInvite href="#p-01" label="please, keep scrolling" />
       </section>
 
       {PRINCIPLES.map((p, i) => (
