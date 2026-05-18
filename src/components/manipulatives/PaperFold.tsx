@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PaperState } from '@/lib/lesson/types';
 import { Caption } from './Caption';
 import { FoldChip } from './FoldChip';
@@ -23,9 +23,15 @@ export function PaperFold({ value, onChange, disabled }: PaperFoldProps) {
     () => value?.folds ?? [],
   );
 
+  /* Stable ref for onChange so re-renders in the parent don't spin a loop. */
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange?.({ kind: 'paper', folds });
-  }, [folds, onChange]);
+    onChangeRef.current = onChange;
+  });
+
+  useEffect(() => {
+    onChangeRef.current?.({ kind: 'paper', folds });
+  }, [folds]);
 
   const handleTap = () => {
     if (disabled) return;

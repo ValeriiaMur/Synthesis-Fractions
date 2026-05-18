@@ -1,34 +1,30 @@
-import { generateHint, type HintInput, type ManipulativeKind } from '@/lib/agent/generateHint';
+import { generateHint, type HintInput } from '@/lib/agent/generateHint';
 import { getHintLLM } from '@/lib/agent/anthropicClient';
-
-const KINDS: ReadonlyArray<ManipulativeKind> = ['chocolate', 'pizza', 'paper'];
+import {
+  isKnownKind,
+  isNonEmptyString,
+  isPositiveInt,
+} from '@/lib/agent/validation';
 
 type ValidationResult =
   | { readonly ok: true; readonly input: HintInput }
   | { readonly ok: false; readonly reason: string };
-
-function isString(v: unknown): v is string {
-  return typeof v === 'string' && v.length > 0;
-}
-
-function isPositiveInt(v: unknown): v is number {
-  return typeof v === 'number' && Number.isInteger(v) && v >= 1;
-}
 
 function validate(raw: unknown): ValidationResult {
   if (typeof raw !== 'object' || raw === null) {
     return { ok: false, reason: 'body-not-object' };
   }
   const body = raw as Record<string, unknown>;
-  const kind = body.manipulativeKind;
-  if (typeof kind !== 'string' || !KINDS.includes(kind as ManipulativeKind)) {
+  if (!isKnownKind(body.manipulativeKind)) {
     return { ok: false, reason: 'manipulativeKind-invalid' };
   }
-  if (!isString(body.question)) return { ok: false, reason: 'question-invalid' };
-  if (!isString(body.correctOptionLabel)) {
+  if (!isNonEmptyString(body.question)) {
+    return { ok: false, reason: 'question-invalid' };
+  }
+  if (!isNonEmptyString(body.correctOptionLabel)) {
     return { ok: false, reason: 'correctOptionLabel-invalid' };
   }
-  if (!isString(body.selectedOptionLabel)) {
+  if (!isNonEmptyString(body.selectedOptionLabel)) {
     return { ok: false, reason: 'selectedOptionLabel-invalid' };
   }
   if (!isPositiveInt(body.attemptCount)) {
@@ -37,7 +33,7 @@ function validate(raw: unknown): ValidationResult {
   return {
     ok: true,
     input: {
-      manipulativeKind: kind as ManipulativeKind,
+      manipulativeKind: body.manipulativeKind,
       question: body.question,
       correctOptionLabel: body.correctOptionLabel,
       selectedOptionLabel: body.selectedOptionLabel,

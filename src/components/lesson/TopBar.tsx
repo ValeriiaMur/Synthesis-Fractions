@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { IconArrowLeft } from './IconArrowLeft';
 import { IconPause } from './IconPause';
 import { IconSound } from './IconSound';
 
@@ -19,6 +21,14 @@ export function TopBar({ progress, onPause, onToggleSound }: TopBarProps) {
   return (
     <div className="topbar">
       <div className="topbar-side">
+        <Link
+          href="/"
+          className="icon-btn"
+          title="Back to home"
+          aria-label="Back to home"
+        >
+          <IconArrowLeft />
+        </Link>
         <button
           type="button"
           className="icon-btn"

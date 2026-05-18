@@ -1,16 +1,11 @@
 import { runLessonAgent, type ManipulativeKind } from '@/lib/agent/lessonAgent';
 import { getHintLLM } from '@/lib/agent/anthropicClient';
+import {
+  isKnownBeatId,
+  isKnownKind,
+  isNonEmptyString,
+} from '@/lib/agent/validation';
 import type { BeatId } from '@/lib/lesson/types';
-
-const KNOWN_BEAT_IDS: ReadonlyArray<BeatId> = [
-  'chocolate_intro',
-  'chocolate_check',
-  'pizza_explore',
-  'pizza_check',
-  'paper_fold_final',
-];
-
-const KNOWN_KINDS: ReadonlyArray<ManipulativeKind> = ['chocolate', 'pizza', 'paper'];
 
 type ValidationResult =
   | {
@@ -23,35 +18,25 @@ type ValidationResult =
     }
   | { readonly ok: false; readonly reason: string };
 
-function isString(v: unknown): v is string {
-  return typeof v === 'string' && v.length > 0;
-}
-
 function validate(raw: unknown): ValidationResult {
   if (typeof raw !== 'object' || raw === null) {
     return { ok: false, reason: 'body-not-object' };
   }
   const body = raw as Record<string, unknown>;
-  if (
-    typeof body.beatId !== 'string' ||
-    !KNOWN_BEAT_IDS.includes(body.beatId as BeatId)
-  ) {
+  if (!isKnownBeatId(body.beatId)) {
     return { ok: false, reason: 'beatId-invalid' };
   }
-  if (
-    typeof body.manipulativeKind !== 'string' ||
-    !KNOWN_KINDS.includes(body.manipulativeKind as ManipulativeKind)
-  ) {
+  if (!isKnownKind(body.manipulativeKind)) {
     return { ok: false, reason: 'manipulativeKind-invalid' };
   }
-  if (!isString(body.reflectionText)) {
+  if (!isNonEmptyString(body.reflectionText)) {
     return { ok: false, reason: 'reflectionText-invalid' };
   }
   return {
     ok: true,
     input: {
-      beatId: body.beatId as BeatId,
-      manipulativeKind: body.manipulativeKind as ManipulativeKind,
+      beatId: body.beatId,
+      manipulativeKind: body.manipulativeKind,
       reflectionText: body.reflectionText,
     },
   };

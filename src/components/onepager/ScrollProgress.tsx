@@ -24,10 +24,13 @@ export function ScrollProgress() {
       <div
         style={{
           height: '100%',
-          width: `${pct * 100}%`,
+          width: '100%',
           background: 'linear-gradient(90deg, var(--blue), var(--green))',
           boxShadow: '0 0 12px rgba(91,140,255,0.7)',
-          transition: 'width .12s linear',
+          transform: `scaleX(${pct})`,
+          transformOrigin: 'left center',
+          transition: 'transform .2s cubic-bezier(0.16, 1, 0.3, 1)',
+          willChange: 'transform',
         }}
       />
     </div>

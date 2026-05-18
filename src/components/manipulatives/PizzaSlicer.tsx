@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PizzaState } from '@/lib/lesson/types';
 import { Caption } from './Caption';
 
@@ -41,9 +41,15 @@ export function PizzaSlicer({ value, onChange, disabled }: PizzaSlicerProps) {
   const [cut, setCut] = useState<number>(value?.sliceCount === 4 ? 1 : 0);
   const slices: 2 | 4 = cut > 0.5 ? 4 : 2;
 
+  /* Stable ref for onChange so re-renders in the parent don't spin a loop. */
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange?.({ kind: 'pizza', sliceCount: slices });
-  }, [slices, onChange]);
+    onChangeRef.current = onChange;
+  });
+
+  useEffect(() => {
+    onChangeRef.current?.({ kind: 'pizza', sliceCount: slices });
+  }, [slices]);
 
   const R = 110;
   const cx = 140;

@@ -124,7 +124,9 @@ export function FractionBox({
 
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const barsRef = useRef(bars);
-  barsRef.current = bars;
+  useEffect(() => {
+    barsRef.current = bars;
+  });
 
   const palette = useMemo<readonly PaletteFrac[]>(
     () =>
@@ -140,30 +142,61 @@ export function FractionBox({
   const sumValue = fracValue(sum);
   const filled = isOne(sum);
 
-  /* Whenever the workspace just hit "exactly one", capture the combo and
-     flip the green-glow flag for 1.2s. */
+  /* Cooldown timer for the green "just filled" glow. setTimeout side-effect
+     only — no setState during render or in another effect. */
+  const justFilledTimerRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!filled || bars.length === 0) return;
-    const key = comboKey(bars);
-    setCombos((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
-    setJustFilled(true);
-    const t = window.setTimeout(() => setJustFilled(false), 1200);
-    return () => window.clearTimeout(t);
-  }, [filled, bars]);
+    if (!justFilled) return;
+    if (justFilledTimerRef.current !== null) {
+      window.clearTimeout(justFilledTimerRef.current);
+    }
+    justFilledTimerRef.current = window.setTimeout(() => {
+      setJustFilled(false);
+      justFilledTimerRef.current = null;
+    }, 1200);
+    return () => {
+      if (justFilledTimerRef.current !== null) {
+        window.clearTimeout(justFilledTimerRef.current);
+        justFilledTimerRef.current = null;
+      }
+    };
+  }, [justFilled]);
 
-  /* Publish to the lesson state machine. */
+  /* Stable ref for onChange so a fresh parent callback identity doesn't
+     re-fire this publish effect and spin an infinite loop. */
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange?.({
+    onChangeRef.current = onChange;
+  });
+
+  /* Publish to the lesson state machine on any commit-time change. */
+  useEffect(() => {
+    onChangeRef.current?.({
       kind: 'fractionbox',
       bars,
       combos: combos.size,
     });
-  }, [bars, combos, onChange]);
+  }, [bars, combos]);
+
+  /** Commit a new `bars` array, and if it just filled the row, record the
+   *  combo and trigger the glow. Called from drop handlers + reset. */
+  const commitBars = useCallback(
+    (next: readonly FractionBoxBar[]) => {
+      setBars(next);
+      const s = fracSum(next);
+      if (next.length > 0 && isOne(s)) {
+        const key = comboKey(next);
+        setCombos((prev) => {
+          if (prev.has(key)) return prev;
+          const merged = new Set(prev);
+          merged.add(key);
+          return merged;
+        });
+        setJustFilled(true);
+      }
+    },
+    [],
+  );
 
   const computeInsertIndex = useCallback(
     (clientX: number, wsEl: HTMLElement | null): number => {
@@ -261,7 +294,7 @@ export function FractionBox({
             const insertAt = computeInsertIndex(ev.clientX, wsEl);
             const next = [...cur];
             next.splice(insertAt, 0, newBar);
-            setBars(next);
+            commitBars(next);
           }
         } else {
           const others = cur.filter((b) => b.id !== drag.barId);
@@ -270,11 +303,11 @@ export function FractionBox({
             const insertAt = computeInsertIndex(ev.clientX, wsEl);
             const next = [...others];
             next.splice(insertAt, 0, dragged);
-            setBars(next);
+            commitBars(next);
           }
         }
       } else if (drag.source === 'workspace') {
-        setBars(cur.filter((b) => b.id !== drag.barId));
+        commitBars(cur.filter((b) => b.id !== drag.barId));
       }
       setDrag(null);
       setHoverWs(false);
@@ -288,7 +321,7 @@ export function FractionBox({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [drag, computeInsertIndex]);
+  }, [drag, computeInsertIndex, commitBars]);
 
   const reset = () => {
     if (disabled) return;

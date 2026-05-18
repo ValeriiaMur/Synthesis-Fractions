@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChocolateState } from '@/lib/lesson/types';
 import { Caption } from './Caption';
 import { Fraction } from './Fraction';
@@ -32,10 +32,18 @@ export function ChocolateBar({ value, onChange, disabled }: ChocolateBarProps) {
     initialLocations(seed),
   );
 
+  /* Keep a ref to the latest onChange so the publish effect can call it
+     without listing onChange in its deps — parents often pass a fresh
+     inline arrow each render, which would otherwise spin an infinite loop. */
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
   useEffect(() => {
     const piecesOnReference = locs.filter((l) => l === 'ref').length;
-    onChange?.({ kind: 'chocolate', piecesOnReference });
-  }, [locs, onChange]);
+    onChangeRef.current?.({ kind: 'chocolate', piecesOnReference });
+  }, [locs]);
 
   const toggle = (i: number) => {
     if (disabled) return;

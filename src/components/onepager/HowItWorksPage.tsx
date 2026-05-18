@@ -119,7 +119,7 @@ export function HowItWorksPage() {
 
       <SideRail principles={PRINCIPLES} />
 
-      <section id="principles" className="section snap">
+      <section id="principles" className="section">
         <div className="section-title">
           eight principles · borrowed from maria montessori
         </div>

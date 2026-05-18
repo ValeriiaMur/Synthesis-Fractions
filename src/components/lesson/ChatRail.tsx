@@ -18,7 +18,11 @@ export type ChatMsg = {
 
 export type ChatRailProps = {
   readonly chat: readonly ChatMsg[];
+  /** True while Ari is generating a reply (covers SSE warm-up + streaming). */
   readonly thinking: boolean;
+  /** Live token-accumulating text for the in-flight Ari bubble, or null
+   *  when no reply is streaming. Empty string is shown as TypingDots. */
+  readonly streamingText: string | null;
   readonly studentName: string;
   readonly activeIdx: number;
   readonly totalBeats: number;
@@ -29,11 +33,14 @@ export type ChatRailProps = {
 
 /**
  * Left-side chat rail. Holds Ari's header, the scrolling log, the dashed
- * preset replies, and the input row.
+ * preset replies, and the input row. When `streamingText` is non-null, a
+ * live ari bubble appends the streamed tokens; when it's '' we show the
+ * typing-dots (waiting on the first token).
  */
 export function ChatRail({
   chat,
   thinking,
+  streamingText,
   studentName,
   activeIdx,
   totalBeats,
@@ -47,7 +54,7 @@ export function ChatRail({
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.length, thinking]);
+  }, [chat.length, thinking, streamingText]);
 
   const handleSend = () => {
     const text = draft.trim();
@@ -59,6 +66,11 @@ export function ChatRail({
   const handleKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') handleSend();
   };
+
+  const showStreamingDots =
+    thinking && (streamingText === null || streamingText.length === 0);
+  const showStreamingBubble =
+    streamingText !== null && streamingText.length > 0;
 
   return (
     <aside className="chat">
@@ -86,7 +98,10 @@ export function ChatRail({
             {m.text}
           </ChatMessage>
         ))}
-        {thinking && (
+        {showStreamingBubble && (
+          <ChatMessage from="ari">{streamingText}</ChatMessage>
+        )}
+        {showStreamingDots && (
           <div className="chat-msg ari">
             <div className="chat-msg-who">Ari</div>
             <TypingDots />
@@ -103,7 +118,7 @@ export function ChatRail({
       <div className="chat-input">
         <input
           type="text"
-          placeholder={`type a thought, ${studentName.toLowerCase()}…`}
+          placeholder={`type a thought, ${studentName}…`}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKey}

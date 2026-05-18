@@ -3,7 +3,8 @@ import { shade } from './shade';
 
 describe('shade', () => {
   it('lightens a mid-gray', () => {
-    expect(shade('#808080', 0.1).toLowerCase()).toBe('#999999');
+    // Math.round(255 * 0.1) = 26, so 0x80 + 0x1a = 0x9a per channel.
+    expect(shade('#808080', 0.1).toLowerCase()).toBe('#9a9a9a');
   });
 
   it('darkens a mid-gray', () => {

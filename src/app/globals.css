@@ -917,7 +917,42 @@ html.snap-scroll {
   scroll-snap-stop: normal;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html.snap-scroll {
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+  }
+  .hero h1,
+  .hero p,
+  .hero-actions,
+  .hero-preview,
+  .principle-num-row,
+  .principle-stage h3,
+  .principle-stage .body,
+  .principle-demo,
+  .principle-ghost-num {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .principle-stage.in-view .principle-ghost-num {
+    opacity: 0.06 !important;
+  }
+}
+
 /* hero */
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .hero {
   position: relative;
   min-height: 100vh;
@@ -928,6 +963,25 @@ html.snap-scroll {
   max-width: 1240px;
   margin: 0 auto;
   z-index: 4;
+}
+
+.hero h1,
+.hero p,
+.hero-actions,
+.hero-preview {
+  animation: hero-rise 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.hero h1 {
+  animation-delay: 0.05s;
+}
+.hero p {
+  animation-delay: 0.2s;
+}
+.hero-actions {
+  animation-delay: 0.35s;
+}
+.hero-preview {
+  animation-delay: 0.5s;
 }
 
 .hero-row {
@@ -1173,7 +1227,9 @@ html.snap-scroll {
   z-index: 0;
   pointer-events: none;
   font-variant-numeric: tabular-nums;
-  transition: opacity 1.2s ease, transform 1.2s ease;
+  transition:
+    opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
   transform: translateY(-50%) translateX(-30px);
   white-space: nowrap;
 }
@@ -1195,23 +1251,43 @@ html.snap-scroll {
 .principle-demo {
   position: relative;
   z-index: 2;
-  opacity: 0;
-  transform: translateY(28px);
-  transition:
-    opacity 0.85s cubic-bezier(0.2, 0.7, 0.3, 1),
-    transform 0.85s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-.principle-stage.in-view .principle-text {
+/* Inner stagger — each piece fades up on its own delay for a more cinematic feel. */
+.principle-num-row,
+.principle-stage h3,
+.principle-stage .body,
+.principle-demo {
+  opacity: 0;
+  transform: translateY(32px);
+  transition:
+    opacity 1s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.principle-stage.in-view .principle-num-row {
   opacity: 1;
   transform: none;
   transition-delay: 0.05s;
 }
 
-.principle-stage.in-view .principle-demo {
+.principle-stage.in-view h3 {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.15s;
+}
+
+.principle-stage.in-view .body {
   opacity: 1;
   transform: none;
   transition-delay: 0.25s;
+}
+
+.principle-stage.in-view .principle-demo {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.35s;
 }
 
 .principle-num-row {
@@ -1390,4 +1466,153 @@ html.snap-scroll {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* screen-reader-only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* name-prompt modal — cosmos-styled blocker shown before the lesson starts */
+@keyframes name-prompt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.name-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.name-prompt-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      120% 80% at 50% 30%,
+      rgba(8, 16, 49, 0.6) 0%,
+      rgba(4, 8, 24, 0.92) 60%,
+      rgba(2, 4, 14, 0.98) 100%
+    );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.name-prompt-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 480px);
+  padding: 36px 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow:
+    0 30px 80px -30px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: name-prompt-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.name-prompt-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+}
+
+.name-prompt-tag .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 10px var(--blue);
+}
+
+.name-prompt-card h2 {
+  font-weight: 200;
+  font-size: clamp(28px, 3.2vw, 36px);
+  line-height: 1.1;
+  letter-spacing: -0.022em;
+  margin: 6px 0 0;
+  text-wrap: balance;
+}
+
+.name-prompt-card h2 .acc-b {
+  color: var(--blue);
+  font-weight: 400;
+}
+
+.name-prompt-sub {
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+
+.name-prompt-field {
+  display: block;
+}
+
+.name-prompt-field input {
+  width: 100%;
+  height: 56px;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  outline: none;
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--ink);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.name-prompt-field input::placeholder {
+  color: var(--ink-faint);
+}
+
+.name-prompt-field input:focus {
+  border-color: rgba(91, 140, 255, 0.55);
+  background: rgba(91, 140, 255, 0.06);
+}
+
+.name-prompt-card .btn-primary {
+  margin-top: 8px;
+  align-self: stretch;
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name-prompt-card {
+    animation: none !important;
+  }
 }
