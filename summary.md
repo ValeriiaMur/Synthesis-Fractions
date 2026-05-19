@@ -22,9 +22,7 @@ lines, and celebration replies. Branching (yes/no on MC correctness,
 which hint to play, when to scaffold, where to advance) is a pure module
 [`branching.ts`](src/lib/lesson/branching.ts) — fully unit-tested, no
 network, no async. ElevenLabs TTS narrates the authored lines so Ari
-sounds warm without being stochastic. The earlier LangGraph + LLM agent
-layer (the StateGraph + 4 task clients + 5 API routes + the streaming
-chat rail) was deleted in full — the active lesson never depended on it.
+sounds warm without being stochastic.
 
 Two UI routes, one visual system (cosmos / space palette in
 [globals.css](src/app/globals.css)):
