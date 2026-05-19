@@ -150,7 +150,7 @@ describe('reactToMC — wrong answer', () => {
 describe('enterLineFor', () => {
   it('returns the beat enterLine with {name} interpolated', () => {
     expect(enterLineFor(getBeat('pizza_explore'), 'Ben')).toBe(
-      'Locked in, Ben. Pizza touchdown coming up.',
+      'Locked in, Ben. Pizza next.',
     );
   });
 

@@ -37,12 +37,14 @@ export function Cell({
       className={`cell ${status}`}
       data-screen-label={`${padded} ${kind}`}
     >
-      <div className="cell-gutter">
-        <span className="num">{padded}</span>
-        <span className="phase">{phaseLabel}</span>
-      </div>
       <div className="cell-body">
         <div className="cell-kind">
+          {/* Cell number + phase live INSIDE the body header now —
+              the old left-side gutter ("01 P1 INTRODUCE") was removed
+              so cells run full width. Keeping the number visible here
+              preserves scrollability + screen-reader cues. */}
+          <span className="cell-kind-idx">{padded}</span>
+          <span className="cell-kind-phase">{phaseLabel}</span>
           <span className="label">{kind}</span>
           <span className="sep" />
           {status === 'done' && (

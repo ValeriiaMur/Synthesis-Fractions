@@ -544,6 +544,19 @@ progress segments + back/sound buttons stay clear.
 `100vh` fallback) so the Safari URL bar collapsing/expanding doesn't push
 the bottom of the notebook offscreen.
 
+**iOS Safari safe-area + tap latency.** Two pitfalls that only reproduce
+on the real iOS Simulator (Chrome DevTools mobile preview skips both):
+
+- `src/app/layout.tsx` exports a `Viewport` config with
+  `viewportFit: 'cover'`. Without it iOS Safari reports
+  `env(safe-area-inset-top)` as `0` and the topbar's `padding-top` calc
+  collapses up under the notch / status bar.
+- `globals.css` applies `touch-action: manipulation` +
+  `-webkit-tap-highlight-color: transparent` to every `button`, `a`, and
+  `[role="button"]`. The former removes WebKit's 300ms double-tap-to-zoom
+  delay — without it MC options and topbar icons need a second tap to
+  register on iOS, exactly the "I need to click a few times" symptom.
+
 **Hero h1 / Intro h1.** Both use `clamp()` instead of fixed sizes so the
 title scales smoothly from iPad mini portrait up through desktop.
 

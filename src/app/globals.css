@@ -81,6 +81,24 @@ input {
   color: inherit;
 }
 
+/* iOS Safari fixes — Chrome DevTools mobile preview never reproduces
+   these because it skips the WebKit-only delays.
+
+   1. `touch-action: manipulation` removes the 300ms double-tap-to-zoom
+      delay so the first tap fires immediately. Without it, the lesson's
+      MC buttons + topbar icons need a second tap to register — exactly
+      the "I need to click a few times" symptom seen in the Simulator.
+
+   2. `-webkit-tap-highlight-color: transparent` kills the dark flash
+      iOS adds over tapped buttons; lets the in-app :active styles read
+      cleanly. */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ----------- shared backdrop layers ----------- */
 .cosmos-bg {
   background:
@@ -411,23 +429,42 @@ input {
 }
 
 /* ----------- top bar -----------
-   Sits 16px below the viewport top so the 44px icon buttons + lesson
-   tag have visible cosmos above them — they shouldn't crash into the
-   browser/OS chrome (macOS title bar, mobile status bar, address bar).
-   The bar itself is 80px tall (44px button + ~18px above + ~18px
-   below) and the .stage offset below = top + height = 96px so the
-   notebook still lives directly underneath the bar. */
+   The bar itself stays anchored at y=0 of the lesson-app box (so it
+   sits flush with the viewport top + z-index above anything that might
+   scroll), but its INTERNAL padding-top is generous so the icons sit
+   well below the viewport edge / OS chrome. Together with the
+   gradient background, the bar reads as a proper header — the kid
+   doesn't see notebook content "cut through" the area where the
+   topbar text lives. `env(safe-area-inset-top)` adds the system-
+   reserved area on top (iOS PWA, iPhone notch). */
 .topbar {
   position: absolute;
-  top: 16px;
+  top: 0;
   left: 0;
   right: 0;
-  height: 80px;
+  /* Total height = safe-area + 32px top breathing room + 44px button
+     + 16px below button. Keeps the icon row well clear of the
+     viewport edge AND clear of the notebook content below. */
+  height: calc(env(safe-area-inset-top, 0px) + 92px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 32px);
+  padding-right: 28px;
+  padding-bottom: 16px;
+  padding-left: 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 28px 0 28px;
   z-index: 30;
+  /* Solid-ish backdrop so scrolling content never appears "through"
+     the topbar text. The gradient softens the bottom edge so the bar
+     doesn't read as a hard rectangle on the dark cosmos. */
+  background: linear-gradient(
+    180deg,
+    var(--bg-0) 0%,
+    var(--bg-0) 70%,
+    rgba(5, 10, 32, 0.6) 100%
+  );
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .topbar-side {
@@ -523,8 +560,9 @@ input {
    them at the moment. */
 .stage {
   position: absolute;
-  /* 16 (topbar offset) + 80 (topbar height). */
-  top: 96px;
+  /* Match the topbar's total height (safe-area + 92px). The notebook
+     starts exactly below the bar regardless of device safe-area. */
+  top: calc(env(safe-area-inset-top, 0px) + 92px);
   left: 0;
   right: 0;
   bottom: 0;
@@ -615,13 +653,15 @@ input {
   gap: 28px;
 }
 
-/* ----------- cell ----------- */
+/* ----------- cell -----------
+   Cells run full width — the old left-side gutter (the big "01 / P1 ·
+   INTRODUCE" column) was removed so every cell card uses the full
+   notebook content width. The cell index + phase label moved into the
+   card header (`.cell-kind`) as small mono chips, so the navigation
+   cue stays without claiming a 80px sidebar. */
 .cell {
   position: relative;
-  display: grid;
-  grid-template-columns: 80px 1fr;
-  gap: 18px;
-  align-items: start;
+  display: block;
   opacity: 0.55;
   transform: translateY(4px);
   transition: opacity 0.4s ease, transform 0.4s ease;
@@ -638,38 +678,30 @@ input {
   pointer-events: none;
 }
 
-.cell-gutter {
+/* In-header cell number — the big-numeral that used to live in the
+   gutter, shrunk to a mono chip and recolored via .cell.active/.done
+   so the status read still pops. */
+.cell-kind-idx {
   font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
   font-size: 11px;
-  letter-spacing: 0.08em;
-  color: var(--ink-soft);
-  text-align: right;
-  padding-top: 22px;
-  text-transform: uppercase;
-  user-select: none;
-}
-
-.cell-gutter .num {
-  display: block;
-  font-size: 26px;
+  letter-spacing: 0.14em;
   color: var(--ink);
-  font-weight: 200;
-  font-family: var(--font-work-sans), "Work Sans", sans-serif;
-  letter-spacing: -0.02em;
-  margin-bottom: 4px;
+  font-weight: 500;
 }
 
-.cell-gutter .phase {
-  display: block;
-  color: var(--ink-mute);
+.cell-kind-phase {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
   font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
 }
 
-.cell.active .cell-gutter .num {
+.cell.active .cell-kind-idx {
   color: var(--blue);
 }
 
-.cell.done .cell-gutter .num {
+.cell.done .cell-kind-idx {
   color: var(--green);
 }
 
@@ -1757,13 +1789,13 @@ input {
    Portrait iPad (744 / 810 wide) → stage stacks (chat on top, notebook
    below). Landscape iPad (1080–1366 wide) → side-by-side, but the chat
    column shrinks below 1200px so the notebook gets breathing room. The
-   notebook itself reduces gutter + cell-gutter on narrow widths so prose
-   doesn't get squeezed.
+   notebook itself reduces gutter on narrow widths so prose doesn't get
+   squeezed.
    ========================================================= */
 
 /* Portrait — anything where height ≥ width (every iPad portrait + phones).
    With the chat rail gone, the stage is always a single full-width
-   notebook; portrait just trims padding + cell-gutter so the prose fits. */
+   notebook; portrait just trims padding so the prose fits. */
 @media (max-aspect-ratio: 1/1) {
   .notebook {
     /* 140px bottom keeps the floating JumpButton (48px + 32px from bottom)
@@ -1772,20 +1804,6 @@ input {
   }
   .notebook-inner {
     max-width: 100%;
-  }
-  .cell {
-    grid-template-columns: 40px 1fr;
-    gap: 8px;
-  }
-  .cell-gutter {
-    padding-top: 18px;
-    font-size: 9.5px;
-  }
-  .cell-gutter .num {
-    font-size: 20px;
-  }
-  .cell-gutter .phase {
-    font-size: 8.5px;
   }
   .cell-body {
     padding: 22px 20px;
@@ -1825,15 +1843,19 @@ input {
    Shrink letter-spacing first, then drop the textual tag on phones. */
 @media (max-width: 900px) {
   .topbar {
-    /* Smaller offset on phones — system chrome already eats some
-       vertical space, so 12px is enough breathing room. */
-    top: 12px;
-    padding: 12px 18px 0 18px;
-    height: 72px;
+    /* Mirror the desktop structure on phones: anchored at y=0 with
+       generous internal padding-top + safe-area inset. Slightly
+       tighter overall (24px breathing room instead of 32px) since
+       phone viewports are shorter. */
+    height: calc(env(safe-area-inset-top, 0px) + 80px);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
+    padding-right: 18px;
+    padding-bottom: 12px;
+    padding-left: 18px;
   }
   .stage {
-    /* 12 (topbar offset) + 72 (topbar height). */
-    top: 84px;
+    /* Match topbar height. */
+    top: calc(env(safe-area-inset-top, 0px) + 80px);
     /* Mirror the desktop gap, scaled to the smaller bar. */
     padding-top: 12px;
   }
