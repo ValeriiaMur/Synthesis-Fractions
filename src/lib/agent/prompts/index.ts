@@ -13,7 +13,6 @@ export {
   HINT_FEW_SHOT,
   type FewShotExample,
 } from './hint';
-export { PARAPHRASE_SYSTEM, PARAPHRASE_FEW_SHOT } from './paraphrase';
 export { REFLECTION_SYSTEM, REFLECTION_FEW_SHOT } from './reflection';
 export { SCAFFOLD_SYSTEM, SCAFFOLD_FEW_SHOT } from './scaffold';
 export { ADVANCE_SYSTEM, ADVANCE_FEW_SHOT } from './advance';

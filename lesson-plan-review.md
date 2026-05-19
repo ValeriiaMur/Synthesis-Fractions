@@ -1,4 +1,4 @@
-# Lesson Plan Review — "The Skiff Run"
+# Lesson Plan Review — "The Spirit Run"
 
 A short story-driven lesson on equivalent fractions for a 9-year-old, built on top of the existing Synthesis Tutor codebase. Six beats, one continuous through-line, ends on the new Fraction Box (Lego-brick) exercise.
 
@@ -6,7 +6,7 @@ A short story-driven lesson on equivalent fractions for a 9-year-old, built on t
 
 ## Story arc (one breath)
 
-You and Ari (your AI co-pilot) are flying a small delivery ship called the **Skiff** out to a moon outpost. Four stops, one trip home. Every stop is a small fraction puzzle:
+You and Ari (your AI co-pilot) are flying a small delivery ship called the **Spirit** out to a moon outpost. Four stops, one trip home. Every stop is a small fraction puzzle:
 
 1. **Load the snack-ration** — chocolate bar split into four squares; the tray it goes in is the size of half the bar.
 2. **Log the ration** — Ari needs a number for the flight log.
@@ -61,8 +61,8 @@ Beats 1–5 are the original lesson's math, unchanged. Beat 6 generalizes: it's 
 1. **Added the Fraction Box.** A new drag-and-drop manipulative built with pointer events (works on mouse, trackpad, iPad), a Lego visual stack made of CSS-only `StudRow` + `LegoBrick` + `PaletteBrick`, a fraction-math helper in `src/lib/lesson/fractions.ts` (`gcd`, `lcm`, `fracSum`, `comboKey`), and a `validateFractionBox` rule that ticks `combos >= minCombos`.
 2. **Widened the type system.** `BeatId` gained `'fraction_box_explore'`; `ManipulativeConfig` / `ManipulativeState` gained the fraction-box variants. `validateManipulative` and `isBeatComplete` both handle the new kind. Tests cover both predicates.
 3. **Story-fied all six beats.** New prose in `src/lib/lesson/lessonData.ts` (preserving the `{y}/{r}/{b}/{g}` highlight tokens so the colored numerals still light up). The math underneath each beat is unchanged; only the wrapping fiction is new.
-4. **Story-fied Intro + Outro.** Intro names the Skiff and sets the trip. Outro is a "warp-drive online" celebration with the ½ = ²⁄₄ equation and a one-line moral.
-5. **Ari's opening lines** changed to be in-world ("Ari here, your co-pilot. Skiff's loaded…").
+4. **Story-fied Intro + Outro.** Intro names the Spirit and sets the trip. Outro is a "warp-drive online" celebration with the ½ = ²⁄₄ equation and a one-line moral.
+5. **Ari's opening lines** changed to be in-world ("Ari here, your co-pilot. Spirit's loaded…").
 
 ## Open questions for the curriculum / product side
 
@@ -77,7 +77,7 @@ Beats 1–5 are the original lesson's math, unchanged. Beat 6 generalizes: it's 
 - **Keyboard support for the Fraction Box.** Today it's pointer-only. Flagged in the handoff. The fix: focusable palette + workspace bricks, Enter/Space to add to the end, Delete/Backspace to remove.
 - **An "ah-ha" beat between 5 and 6.** Optional. A 30-second pause-and-think: "look at the tray, the pizza, the map — what do they have in common?" Right now we leave that synthesis implicit and trust the Outro to land it.
 - **A short epilogue.** When the warp-drive lights up, an extra Ari line that ties back to beat 1 ("remember the snack tray? same amount.") would compound the throughline.
-- **Asset / illustration pass.** Right now the cosmos comes from the background doodles + palette only. A hand-drawn Skiff icon in the Intro and a glowing warp-drive in the Outro would sell the world in ~10 minutes of design work.
+- **Asset / illustration pass.** Right now the cosmos comes from the background doodles + palette only. A hand-drawn Spirit icon in the Intro and a glowing warp-drive in the Outro would sell the world in ~10 minutes of design work.
 
 ---
 

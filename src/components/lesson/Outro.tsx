@@ -46,9 +46,15 @@ export function Outro({ done }: OutroProps) {
           textTransform: 'uppercase',
         }}
       >
-        ✦ warp-drive online · skiff homeward
+        ✦ warp-drive online · spirit homeward
       </div>
-      <div style={{ fontSize: 32, fontWeight: 300, margin: '10px 0 6px' }}>
+      <div
+        style={{
+          fontSize: 'clamp(24px, 3.6vw, 32px)',
+          fontWeight: 300,
+          margin: '10px 0 6px',
+        }}
+      >
         <span style={{ color: 'var(--red)' }}>½</span>
         <span style={{ margin: '0 14px', color: 'var(--ink-mute)' }}>=</span>
         <span style={{ color: 'var(--blue)' }}>²⁄₄</span>

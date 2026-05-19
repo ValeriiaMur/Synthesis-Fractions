@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { ChocolatePiece } from '@/components/manipulatives/ChocolatePiece';
 
 export type TrayItemKind = '½' | '¼' | 'pizza' | 'paper';
 
@@ -31,19 +32,32 @@ export function TrayItem({ item, delay }: TrayItemProps) {
   };
 
   if (item === '½' || item === '¼') {
+    // ½ is a wider chocolate slab (96×44); ¼ is square (44×44).
+    const width = item === '½' ? 96 : 44;
     return (
       <div
         style={{
           ...base,
-          width: item === '½' ? 96 : 44,
+          position: 'relative',
+          width,
           height: 44,
-          background: 'linear-gradient(135deg, #6e3a1c, #8a4622, #5d2f17)',
-          color: 'rgba(255,255,255,0.85)',
+          color: 'rgba(255,255,255,0.95)',
           fontFamily: 'var(--font-work-sans), Work Sans, sans-serif',
-          fontWeight: 400,
+          fontWeight: 500,
+          textShadow: '0 1px 2px rgba(0,0,0,0.6)',
         }}
       >
-        {item}
+        <ChocolatePiece
+          size={44}
+          width={width}
+          alt=""
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 8,
+          }}
+        />
+        <span style={{ position: 'relative', zIndex: 1 }}>{item}</span>
       </div>
     );
   }

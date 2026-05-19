@@ -24,14 +24,6 @@ const hintInput: LessonAgentInput = {
   },
 };
 
-const paraphraseInput: LessonAgentInput = {
-  task: 'paraphrase',
-  payload: {
-    beatId: 'chocolate_intro',
-    originalProse: 'Here is a chocolate bar.',
-  },
-};
-
 const reflectionInput: LessonAgentInput = {
   task: 'classify_reflection',
   payload: {
@@ -93,21 +85,6 @@ describe('runLessonAgent — hint', () => {
   it('rejects praise in a hint response', async () => {
     const llm = llmReturning('Great job! Look at the bar.');
     await expect(runLessonAgent(hintInput, { llm })).rejects.toThrow(/praise/i);
-  });
-});
-
-describe('runLessonAgent — paraphrase', () => {
-  it('routes a paraphrase task and returns paraphrasedProse', async () => {
-    const llm = llmReturning('A chocolate bar sits in front of you.');
-    const out = await runLessonAgent(paraphraseInput, { llm });
-    expect(out.paraphrasedProse).toBe('A chocolate bar sits in front of you.');
-  });
-
-  it('rejects praise in a paraphrase response', async () => {
-    const llm = llmReturning('Awesome! Look at the chocolate bar.');
-    await expect(runLessonAgent(paraphraseInput, { llm })).rejects.toThrow(
-      /praise/i,
-    );
   });
 });
 

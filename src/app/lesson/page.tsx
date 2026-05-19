@@ -7,6 +7,7 @@ import { ResumePrompt } from '@/components/lesson/ResumePrompt';
 import { lesson } from '@/lib/lesson/lessonData';
 import { titleCaseName } from '@/lib/lesson/titleCaseName';
 import {
+  correctedLessonState,
   decodeLessonState,
   hasMeaningfulProgress,
   storageKey,
@@ -44,11 +45,16 @@ type ResumeStatus =
 function initialResumeStatus(): ResumeStatus {
   if (typeof window === 'undefined') return { kind: 'fresh' };
   try {
-    const saved = decodeLessonState(
+    const decoded = decodeLessonState(
       window.localStorage.getItem(storageKey(lesson.id)),
       lesson.id,
     );
-    if (saved && hasMeaningfulProgress(saved)) {
+    if (decoded && hasMeaningfulProgress(decoded)) {
+      // Repair stale snapshots whose activeIdx points at a beat that was
+      // already marked done (correct-MC ran but the 600ms-deferred advanceTo
+      // never got to fire before the tab closed). See `correctedLessonState`
+      // in lessonPersistence.ts.
+      const saved = correctedLessonState(decoded, lesson.beats);
       return { kind: 'pending', saved };
     }
   } catch {

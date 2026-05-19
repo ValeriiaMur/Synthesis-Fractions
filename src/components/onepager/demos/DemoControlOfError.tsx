@@ -3,6 +3,7 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { DemoFrame } from './DemoFrame';
+import { ChocolatePiece } from '@/components/manipulatives/ChocolatePiece';
 
 const stepBtn: CSSProperties = {
   width: 34,
@@ -81,18 +82,11 @@ export function DemoControlOfError() {
           }}
         >
           {Array.from({ length: n }, (_, i) => (
-            <div
+            <ChocolatePiece
               key={i}
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 8,
-                background:
-                  'linear-gradient(135deg, #6e3a1c 0%, #8a4622 30%, #5d2f17 100%)',
-                boxShadow:
-                  'inset 0 2px 0 rgba(255,255,255,0.06), inset 0 -2px 0 rgba(0,0,0,0.35)',
-                animation: 'popin .3s ease',
-              }}
+              size={48}
+              alt=""
+              style={{ animation: 'popin .3s ease' }}
             />
           ))}
           <div

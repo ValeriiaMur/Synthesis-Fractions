@@ -21,19 +21,15 @@ import type {
 } from '@/lib/lesson/types';
 import { stripMarkup } from '@/lib/lesson/stripMarkup';
 import { isBeatComplete, lookupHint } from '@/lib/lesson/completes';
-import { aiReplyTo } from '@/lib/lesson/aiReplyTo';
 import { fetchHint } from '@/lib/agent/hintClient';
-import { fetchParaphrase } from '@/lib/agent/paraphraseClient';
 import { fetchAdvanceLine } from '@/lib/agent/advanceClient';
 import { fetchScaffoldedMC } from '@/lib/agent/scaffoldMCClient';
-import { streamChat } from '@/lib/agent/chatClient';
 import type { ManipulativeKind } from '@/lib/agent/lessonAgent';
 import { getVoicePlayer } from '@/lib/voice/voicePlayer';
 import { Stars } from '@/components/space/Stars';
 import { GridBg } from '@/components/space/GridBg';
 import { Doodles } from '@/components/space/Doodles';
 import { TopBar, type ProgressSegmentStatus } from './TopBar';
-import { ChatRail, type ChatMsg } from './ChatRail';
 import { Cell } from './Cell';
 import { Prose } from './Prose';
 import { MCBlock, type MCStatus } from './MCBlock';
@@ -46,6 +42,7 @@ import { ChocolateBar } from '@/components/manipulatives/ChocolateBar';
 import { PizzaSlicer } from '@/components/manipulatives/PizzaSlicer';
 import { PaperFold } from '@/components/manipulatives/PaperFold';
 import { FractionBox } from '@/components/manipulatives/FractionBox';
+import { BlockStudio } from '@/components/manipulatives/BlockStudio/BlockStudio';
 
 import type { PersistedLessonState } from '@/lib/lesson/lessonPersistence';
 import { snapshotLesson, storageKey } from '@/lib/lesson/lessonPersistence';
@@ -60,10 +57,7 @@ export type LessonPageProps = {
 
 type CellStatus = 'locked' | 'active' | 'done';
 
-const QUICK_REPLIES = ["i'm stuck", 'show me again', 'what next?'];
 const SCAFFOLD_THRESHOLD = 3;
-/** Limit recent-chat context fed to the chat LLM so prompts stay short. */
-const CHAT_CONTEXT_TURNS = 8;
 
 function phaseLabel(p: LessonPhase): string {
   if (p === 'period_1_introduce') return 'P1 · introduce';
@@ -106,6 +100,16 @@ function renderManipulative(
       />
     );
   }
+  if (manip.kind === 'blockstudio') {
+    return (
+      <BlockStudio
+        config={manip}
+        value={value?.kind === 'blockstudio' ? value : undefined}
+        onChange={onChange}
+        disabled={disabled}
+      />
+    );
+  }
   return (
     <FractionBox
       config={manip}
@@ -117,16 +121,38 @@ function renderManipulative(
 }
 
 function manipulativeKind(beat: Beat): ManipulativeKind | null {
-  return beat.manipulative?.kind ?? null;
+  const k = beat.manipulative?.kind;
+  if (k === 'chocolate' || k === 'pizza' || k === 'paper' || k === 'fractionbox') {
+    return k;
+  }
+  return null;
 }
 
 /**
  * Top-level lesson screen + state machine + agent wiring.
  *
+ * Layout: full-width notebook. The chat rail was retired in favour of a
+ * voice-driven, view-driven experience — the kid reads (or listens to) one
+ * cell, completes the exercise, and the lesson advances. There is no more
+ * free-text chat with Ari; reactions live in the hint / celebration bubbles
+ * inside each cell and in the voice queue.
+ *
  * Canonical-first contract: every authored line (hints, prose, MC) renders
- * immediately. The LLM (Haiku 4.5, via the lesson agent) fires in the
- * background and *swaps* the displayed text only when it resolves under
- * budget. If the network or the model fails, the canonical copy stays put.
+ * immediately. The LLM (Haiku 4.5) fires in the background and *swaps* the
+ * displayed text only when it resolves under budget. If the network or the
+ * model fails, the canonical copy stays put.
+ *
+ * Voice contract (see also summary.md):
+ *  - On mount the voice queue is cleared and the active beat's prose is
+ *    queued. Re-entering the route from anywhere starts fresh on whichever
+ *    cell the kid is on.
+ *  - On unmount the queue is cleared (the currently-playing utterance
+ *    finishes — voicePlayer.stop is non-interrupting by design).
+ *  - During exercises (manipulative tinkering, considering an MC) the
+ *    voice is silent. speakAri is only called from reaction sites below.
+ *  - Wrong MC → speak the hint (LLM if available, canonical otherwise).
+ *  - Correct MC → speak the celebration; 600ms later advanceTo races the
+ *    advance line and queues [advance, next prose] in visual order.
  */
 export function LessonPage({
   lesson,
@@ -165,28 +191,11 @@ export function LessonPage({
     Partial<Record<BeatId, MCConfig>>
   >(() => ({ ...(initialState?.scaffoldedMC ?? {}) }));
 
-  // ---- chat state ----
-  const [thinking, setThinking] = useState(false);
-  /** While Ari is streaming, this holds the accumulating text. Cleared on
-   *  stream end, at which point the final text is pushed to `chat`. */
-  const [streamingText, setStreamingText] = useState<string | null>(null);
-  const [chat, setChat] = useState<readonly ChatMsg[]>(() => {
-    if (initialState?.chat && initialState.chat.length > 0) {
-      return initialState.chat.map((m) => ({ from: m.from, text: m.text }));
-    }
-    const activeBeat = beats[initialState?.activeIdx ?? 0];
-    return [
-      {
-        from: 'ari',
-        text: `Hi ${studentName} — Ari here, your co-pilot. Skiff's loaded and the moon outpost is waiting.`,
-      },
-      {
-        from: 'ari',
-        text: "Six short stops. Each one's a small fraction puzzle. Take your time — the ship waits for us, not the other way around.",
-      },
-      { from: 'ari', text: stripMarkup(activeBeat.prose) },
-    ];
-  });
+  /** Tracks which beats have an in-world "▸ cell 02 unlocked" line shown
+   *  above them. Populated lazily as the kid advances; not persisted. */
+  const [unlockedBanners, setUnlockedBanners] = useState<
+    ReadonlySet<BeatId>
+  >(() => new Set());
 
   /** Stable cell refs, memoized so they can be safely read during render. */
   const cellRefs = useMemo<readonly RefObject<HTMLDivElement | null>[]>(
@@ -194,26 +203,28 @@ export function LessonPage({
     [beats],
   );
 
-  /** Most recent chat (for chat agent context). Kept in a ref so callbacks
-   *  see the latest value without retriggering. */
-  const chatRef = useRef(chat);
-  useEffect(() => {
-    chatRef.current = chat;
-  });
-
   // Per-request guards so a stale LLM response can't clobber a newer one.
   const hintReqRef = useRef<Partial<Record<BeatId, number>>>({});
   const scaffoldReqRef = useRef<Partial<Record<BeatId, number>>>({});
-  const paraphraseReqRef = useRef<Partial<Record<BeatId, number>>>({});
-  const chatReqRef = useRef(0);
 
   // ---- voice ----
-  // Speak every tutor line as it appears. The voice player no-ops when muted
-  // and de-duplicates identical text via the TTS cache, so the call sites can
-  // fire freely without worrying about repeats.
+  // Reveal-gated: each speakAri call defers `voice.speak` through a double
+  // requestAnimationFrame so React has time to commit + paint the new
+  // visual before audio starts fetching. The voice player itself is FIFO,
+  // so consecutive speakAri calls still play in issue order.
   const voice = useMemo(() => getVoicePlayer(), []);
   const speakAri = useCallback(
-    (text: string) => voice.speak(text),
+    (text: string) => {
+      if (typeof window === 'undefined') {
+        voice.speak(text);
+        return;
+      }
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          voice.speak(text);
+        });
+      });
+    },
     [voice],
   );
   const muted = useSyncExternalStore(
@@ -226,19 +237,47 @@ export function LessonPage({
     [voice],
   );
 
-  // Speak the initial seed messages once on mount.
-  const seededVoiceRef = useRef(false);
+  // Mount-time voice: clear queue + speak whatever beat the kid is on.
+  // Empty deps — this is intentionally one-shot. Subsequent activeIdx
+  // changes are driven by advanceTo, which owns its own voice queueing.
+  //
+  // We do NOT route through speakAri here: speakAri defers voice.speak via a
+  // non-cancellable double-rAF, and under React StrictMode the mount effect
+  // runs twice — both rAF chains end up firing after their respective
+  // cleanups, so the same prose gets queued twice. Use a local rAF chain we
+  // can cancel in cleanup so a re-mount (StrictMode) or fast nav-away can't
+  // leak a stale speak.
+  const initialActiveIdxRef = useRef(activeIdx);
+  const initialBeatsRef = useRef(beats);
   useEffect(() => {
-    if (seededVoiceRef.current) return;
-    seededVoiceRef.current = true;
-    for (const msg of chatRef.current) {
-      if (msg.from === 'ari') speakAri(msg.text);
+    voice.stop();
+    const idx = initialActiveIdxRef.current;
+    const startBeat = initialBeatsRef.current[idx];
+    if (!startBeat || typeof window === 'undefined') {
+      return () => {
+        voice.stop();
+      };
     }
-  }, [speakAri]);
+    const text = stripMarkup(startBeat.prose);
+    let raf2 = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        voice.speak(text);
+      });
+    });
+    return () => {
+      // Navigating away (or StrictMode's dev-mode remount) kills both the
+      // pending queue and the *deferred* speak. The currently-playing
+      // utterance still finishes — voicePlayer.stop is non-interrupting.
+      window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+      voice.stop();
+    };
+  }, [voice]);
 
-  /** Persist the lesson state on any meaningful change. Skips streamingText
-   *  + thinking (transient). Debounced via a microtask so a single user
-   *  action (which often updates several pieces of state) writes once. */
+  /** Persist the lesson state on any meaningful change. Skipping `chat`
+   *  entirely now that the chat rail is gone; we still write an empty
+   *  array to keep the persisted shape backward-compatible. */
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const id = window.requestAnimationFrame(() => {
@@ -252,7 +291,7 @@ export function LessonPage({
           manipStates,
           liveHints,
           scaffoldedMC,
-          chat,
+          chat: [],
         });
         window.localStorage.setItem(
           storageKey(lesson.id),
@@ -273,26 +312,7 @@ export function LessonPage({
     manipStates,
     liveHints,
     scaffoldedMC,
-    chat,
   ]);
-
-  const pushAri = useCallback(
-    (text: string) => {
-      speakAri(text);
-      setChat((c) => [...c, { from: 'ari', text } as const]);
-    },
-    [speakAri],
-  );
-  const pushUser = useCallback(
-    (text: string) =>
-      setChat((c) => [...c, { from: 'user', text } as const]),
-    [],
-  );
-  const pushSystem = useCallback(
-    (text: string) =>
-      setChat((c) => [...c, { from: 'system', text } as const]),
-    [],
-  );
 
   const statusFor = useCallback(
     (idx: number): CellStatus => {
@@ -304,27 +324,22 @@ export function LessonPage({
     [activeIdx, beats, doneSet],
   );
 
-  /** Move to beat `next`. Pushes canonical system + prose immediately; then
-   *  fires fetchAdvanceLine + fetchParaphrase in the background and swaps
-   *  text in place when they resolve. */
+  /** Move to beat `next`. Visually canonical-first (banner + cell unlock
+   *  flip immediately). Voice waits for `fetchAdvanceLine` so that an
+   *  in-world line, when present, is queued BEFORE the next beat's prose. */
   const advanceTo = useCallback(
     (next: number, fromBeatId: BeatId | null) => {
       if (next >= beatCount) return;
       const nextBeat = beats[next];
       setActiveIdx(next);
-      pushSystem(`▸ cell ${String(next + 1).padStart(2, '0')} unlocked`);
-
-      const canonicalProse = stripMarkup(nextBeat.prose);
-      speakAri(canonicalProse);
-      // Insert a placeholder ari message for the prose; track its index so
-      // fetchParaphrase can swap text in place.
-      let proseIndex = -1;
-      setChat((c) => {
-        proseIndex = c.length;
-        return [...c, { from: 'ari', text: canonicalProse } as const];
+      setUnlockedBanners((s) => {
+        if (s.has(nextBeat.id)) return s;
+        const ns = new Set(s);
+        ns.add(nextBeat.id);
+        return ns;
       });
 
-      // In-world acknowledgement line (best-effort).
+      const canonicalProse = stripMarkup(nextBeat.prose);
       void (async () => {
         const line = await fetchAdvanceLine({
           fromBeatId,
@@ -333,38 +348,12 @@ export function LessonPage({
           studentName,
         });
         if (line) {
+          // Voice in visual order: advance line first, then prose.
           speakAri(line);
-          // Splice the advance line BEFORE the canonical prose.
-          setChat((c) => {
-            if (proseIndex < 0 || proseIndex >= c.length) {
-              return [...c, { from: 'ari', text: line } as const];
-            }
-            const before = c.slice(0, proseIndex);
-            const after = c.slice(proseIndex);
-            return [...before, { from: 'ari', text: line } as const, ...after];
-          });
-          proseIndex += 1;
+          speakAri(canonicalProse);
+        } else {
+          speakAri(canonicalProse);
         }
-      })();
-
-      // Background paraphrase swap. Guard against stale requests per beat.
-      const reqId = (paraphraseReqRef.current[nextBeat.id] ?? 0) + 1;
-      paraphraseReqRef.current[nextBeat.id] = reqId;
-      void (async () => {
-        const paraphrased = await fetchParaphrase({
-          beatId: nextBeat.id,
-          originalProse: nextBeat.prose,
-        });
-        if (!paraphrased) return;
-        if (paraphraseReqRef.current[nextBeat.id] !== reqId) return;
-        setChat((c) => {
-          if (proseIndex < 0 || proseIndex >= c.length) return c;
-          const target = c[proseIndex];
-          if (target.from !== 'ari') return c;
-          const next = [...c];
-          next[proseIndex] = { from: 'ari', text: paraphrased };
-          return next;
-        });
       })();
 
       window.setTimeout(() => {
@@ -374,27 +363,35 @@ export function LessonPage({
         });
       }, 250);
     },
-    [beatCount, beats, cellRefs, pushSystem, speakAri, studentName],
+    [beatCount, beats, cellRefs, speakAri, studentName],
   );
 
   const handleManip = useCallback(
     (idx: number, state: ManipulativeState) => {
       const beat = beats[idx];
       setManipStates((m) => ({ ...m, [beat.id]: state }));
-      if (isBeatComplete(beat, state)) {
-        setDoneSet((s) => {
-          if (s.has(beat.id)) return s;
-          const ns = new Set(s);
-          ns.add(beat.id);
-          // If the same beat has an MC (paper_fold_final), don't auto-advance;
-          // wait for the MC answer.
-          if (!beat.mc) {
-            const next = idx + 1;
-            if (next < beatCount) advanceTo(next, beat.id);
-          }
-          return ns;
-        });
-      }
+      if (!isBeatComplete(beat, state)) return;
+
+      // The reducer below is pure; the side-effecting advanceTo() lives
+      // outside it so React 18 StrictMode (which intentionally double-runs
+      // reducers in dev) doesn't fire the advance twice.
+      let wasAlreadyDone = false;
+      setDoneSet((s) => {
+        if (s.has(beat.id)) {
+          wasAlreadyDone = true;
+          return s;
+        }
+        const ns = new Set(s);
+        ns.add(beat.id);
+        return ns;
+      });
+
+      if (wasAlreadyDone) return;
+      // Beats with their own MC (paper_fold_final) don't auto-advance —
+      // they wait for the MC answer.
+      if (beat.mc) return;
+      const next = idx + 1;
+      if (next < beatCount) advanceTo(next, beat.id);
     },
     [advanceTo, beats, beatCount],
   );
@@ -418,8 +415,7 @@ export function LessonPage({
 
       if (opt.id === mc.correctOptionId) {
         setMcStatus((s) => ({ ...s, [beat.id]: 'correct' }));
-        pushUser(opt.label);
-        pushAri("That's right — you can see it.");
+        speakAri("That's right — you can see it.");
         setDoneSet((s) => {
           const n = new Set(s);
           n.add(beat.id);
@@ -431,7 +427,7 @@ export function LessonPage({
         } else {
           window.setTimeout(
             () =>
-              pushAri(
+              speakAri(
                 "That's the lesson. One half and two quarters are the same amount — same delivery, different packing.",
               ),
             500,
@@ -446,8 +442,7 @@ export function LessonPage({
       const canonical = lookupHint(mc.canonicalHints, attempt);
       const nextAttemptCount = attempt + 1;
       setHintAttempts((h) => ({ ...h, [beat.id]: nextAttemptCount }));
-      pushUser(opt.label);
-      if (canonical) pushAri(canonical);
+      if (canonical) speakAri(canonical);
 
       const kind = manipulativeKind(beat);
       const correctOption = mc.options.find(
@@ -523,78 +518,9 @@ export function LessonPage({
       beatCount,
       hintAttempts,
       liveMCFor,
-      pushAri,
-      pushUser,
       scaffoldedMC,
+      speakAri,
     ],
-  );
-
-  /** Stream Ari's reply via the chat agent. Canonical fallback (aiReplyTo)
-   *  fires if the stream yields zero tokens (network / model down). */
-  const runChatReply = useCallback(
-    async (userText: string) => {
-      setThinking(true);
-      setStreamingText('');
-
-      const currentBeat = beats[activeIdx] ?? null;
-      const reqId = chatReqRef.current + 1;
-      chatReqRef.current = reqId;
-
-      // The user message we just pushed is the LAST entry; include the
-      // turns before it as context (cap at CHAT_CONTEXT_TURNS).
-      const recent = chatRef.current
-        .slice(-CHAT_CONTEXT_TURNS - 1, -1)
-        .map((m) => ({ from: m.from, text: m.text }));
-
-      let accumulated = '';
-      let gotAnyToken = false;
-      try {
-        const stream = streamChat({
-          studentName,
-          studentMessage: userText,
-          currentBeatId: currentBeat?.id ?? null,
-          currentBeatProse: currentBeat ? stripMarkup(currentBeat.prose) : null,
-          currentBeatKindLabel: currentBeat?.kindLabel ?? null,
-          manipulativeKind: currentBeat ? manipulativeKind(currentBeat) : null,
-          recentChat: recent,
-        });
-        for await (const token of stream) {
-          if (chatReqRef.current !== reqId) return;
-          gotAnyToken = true;
-          accumulated += token;
-          setStreamingText(accumulated);
-        }
-      } catch {
-        // streamChat never throws, but be defensive.
-      }
-
-      if (chatReqRef.current !== reqId) return;
-
-      if (gotAnyToken && accumulated.trim().length > 0) {
-        pushAri(accumulated.trim());
-      } else {
-        pushAri(aiReplyTo(userText, currentBeat ?? undefined, studentName));
-      }
-      setStreamingText(null);
-      setThinking(false);
-    },
-    [activeIdx, beats, pushAri, studentName],
-  );
-
-  const sendChat = useCallback(
-    (text: string) => {
-      pushUser(text);
-      void runChatReply(text);
-    },
-    [pushUser, runChatReply],
-  );
-
-  const quickReply = useCallback(
-    (text: string) => {
-      pushUser(text);
-      void runChatReply(text);
-    },
-    [pushUser, runChatReply],
   );
 
   const jumpToActive = useCallback(() => {
@@ -623,18 +549,6 @@ export function LessonPage({
       <TopBar progress={progress} muted={muted} onToggleSound={toggleMuted} />
 
       <div className="stage">
-        <ChatRail
-          chat={chat}
-          thinking={thinking}
-          streamingText={streamingText}
-          studentName={studentName}
-          activeIdx={activeIdx}
-          totalBeats={beatCount}
-          quickReplies={QUICK_REPLIES}
-          onSend={sendChat}
-          onQuickReply={quickReply}
-        />
-
         <div className="notebook">
           <div className="notebook-inner">
             <Intro studentName={studentName} />
@@ -661,64 +575,76 @@ export function LessonPage({
                   )
                 : null;
               const isScaffolded = !!scaffoldedMC[beat.id];
+              const showBanner =
+                idx > 0 && unlockedBanners.has(beat.id);
 
               return (
-                <Cell
-                  key={beat.id}
-                  index={idx + 1}
-                  phaseLabel={phaseLabel(beat.phase)}
-                  status={status}
-                  kind={beat.kindLabel}
-                  anchorRef={cellRefs[idx]}
-                >
-                  <Prose text={beat.prose} />
-
-                  {beat.manipulative && (
-                    <div style={{ marginTop: 24 }}>
-                      {renderManipulative(
-                        beat.manipulative,
-                        manipState,
-                        (s) => handleManip(idx, s),
-                        status === 'locked',
-                      )}
+                <div key={beat.id}>
+                  {showBanner && (
+                    <div className="cell-unlock-banner" role="status">
+                      <span className="cell-unlock-line" />
+                      <span>
+                        ▸ cell {String(idx + 1).padStart(2, '0')} unlocked
+                      </span>
+                      <span className="cell-unlock-line" />
                     </div>
                   )}
+                  <Cell
+                    index={idx + 1}
+                    phaseLabel={phaseLabel(beat.phase)}
+                    status={status}
+                    kind={beat.kindLabel}
+                    anchorRef={cellRefs[idx]}
+                  >
+                    <Prose text={beat.prose} />
 
-                  {showMc && liveMC && (
-                    <div style={{ marginTop: 22 }}>
-                      {isScaffolded && (
-                        <div
-                          style={{
-                            fontFamily:
-                              'var(--font-jetbrains-mono), JetBrains Mono, monospace',
-                            fontSize: 10,
-                            letterSpacing: '0.14em',
-                            color: 'var(--ink-mute)',
-                            textTransform: 'uppercase',
-                            marginBottom: 8,
-                          }}
-                        >
-                          ↳ scaffolded
-                        </div>
-                      )}
-                      <MCBlock
-                        mc={liveMC}
-                        onAnswer={(opt) => handleMC(idx, opt)}
-                        locked={status === 'locked'}
-                        selectedId={sel}
-                        status={mcs}
-                      />
-                      {mcs === 'wrong' && (
-                        <HintBubble>{liveHint ?? canonicalHint}</HintBubble>
-                      )}
-                      {mcs === 'correct' && (
-                        <CelebrationBubble>
-                          That&rsquo;s right — you can see it.
-                        </CelebrationBubble>
-                      )}
-                    </div>
-                  )}
-                </Cell>
+                    {beat.manipulative && (
+                      <div style={{ marginTop: 24 }}>
+                        {renderManipulative(
+                          beat.manipulative,
+                          manipState,
+                          (s) => handleManip(idx, s),
+                          status === 'locked',
+                        )}
+                      </div>
+                    )}
+
+                    {showMc && liveMC && (
+                      <div style={{ marginTop: 22 }}>
+                        {isScaffolded && (
+                          <div
+                            style={{
+                              fontFamily:
+                                'var(--font-jetbrains-mono), JetBrains Mono, monospace',
+                              fontSize: 10,
+                              letterSpacing: '0.14em',
+                              color: 'var(--ink-mute)',
+                              textTransform: 'uppercase',
+                              marginBottom: 8,
+                            }}
+                          >
+                            ↳ scaffolded
+                          </div>
+                        )}
+                        <MCBlock
+                          mc={liveMC}
+                          onAnswer={(opt) => handleMC(idx, opt)}
+                          locked={status === 'locked'}
+                          selectedId={sel}
+                          status={mcs}
+                        />
+                        {mcs === 'wrong' && (
+                          <HintBubble>{liveHint ?? canonicalHint}</HintBubble>
+                        )}
+                        {mcs === 'correct' && (
+                          <CelebrationBubble>
+                            That&rsquo;s right — you can see it.
+                          </CelebrationBubble>
+                        )}
+                      </div>
+                    )}
+                  </Cell>
+                </div>
               );
             })}
 

@@ -8,30 +8,43 @@ describe('PizzaSlicer', () => {
     expect(screen.getByLabelText(/pizza/i)).toBeInTheDocument();
   });
 
-  it('reports two slices on mount', () => {
+  it('reports two slices on mount when no value is provided', () => {
     const onChange = vi.fn();
     render(<PizzaSlicer onChange={onChange} />);
     expect(onChange).toHaveBeenCalledWith({ kind: 'pizza', sliceCount: 2 });
   });
 
-  it('reports sliceCount: 4 once the knife slider crosses the halfway point', () => {
+  it('reports sliceCount: 4 when the user picks the 4 button', () => {
     const onChange = vi.fn();
     render(<PizzaSlicer onChange={onChange} />);
-    const slider = screen.getByRole('slider', { name: /knife/i });
-    fireEvent.change(slider, { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: /cut into 4 slices/i }));
     expect(onChange).toHaveBeenLastCalledWith({ kind: 'pizza', sliceCount: 4 });
   });
 
-  it('stays at sliceCount: 2 when the knife slider is below the halfway point', () => {
+  it('reports sliceCount: 8 when the user picks the 8 button', () => {
     const onChange = vi.fn();
     render(<PizzaSlicer onChange={onChange} />);
-    const slider = screen.getByRole('slider', { name: /knife/i });
-    fireEvent.change(slider, { target: { value: '0.3' } });
-    expect(onChange).toHaveBeenLastCalledWith({ kind: 'pizza', sliceCount: 2 });
+    fireEvent.click(screen.getByRole('button', { name: /cut into 8 slices/i }));
+    expect(onChange).toHaveBeenLastCalledWith({ kind: 'pizza', sliceCount: 8 });
   });
 
-  it('disables the slider when disabled prop is set', () => {
+  it('hydrates from the provided value', () => {
+    const onChange = vi.fn();
+    render(
+      <PizzaSlicer
+        value={{ kind: 'pizza', sliceCount: 6 }}
+        onChange={onChange}
+      />,
+    );
+    expect(onChange).toHaveBeenCalledWith({ kind: 'pizza', sliceCount: 6 });
+    const six = screen.getByRole('button', { name: /cut into 6 slices/i });
+    expect(six).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('disables the slice-count buttons when disabled prop is set', () => {
     render(<PizzaSlicer onChange={() => {}} disabled />);
-    expect(screen.getByRole('slider', { name: /knife/i })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /cut into 4 slices/i }),
+    ).toBeDisabled();
   });
 });

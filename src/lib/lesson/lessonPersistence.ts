@@ -11,7 +11,7 @@ import type {
   MCConfig,
 } from './types';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type PersistedChatMsg = {
   readonly from: 'ari' | 'user' | 'system';
@@ -144,6 +144,16 @@ function isManipulativeState(v: unknown): v is ManipulativeState {
   if (kind === 'paper') return Array.isArray(v.folds);
   if (kind === 'fractionbox')
     return Array.isArray(v.bars) && typeof v.combos === 'number';
+  if (kind === 'blockstudio') {
+    return (
+      typeof v.stepIdx === 'number' &&
+      typeof v.questIdx === 'number' &&
+      typeof v.maxStepReached === 'number' &&
+      typeof v.questsDone === 'number' &&
+      typeof v.completed === 'boolean' &&
+      Array.isArray(v.rails)
+    );
+  }
   return false;
 }
 
@@ -206,6 +216,35 @@ export function decodeLessonState(
     scaffoldedMC: parseUnknownMap(parsed.scaffoldedMC, isMCConfig),
     chat: parseChat(parsed.chat),
   };
+}
+
+/**
+ * Repair an `activeIdx` that points at an already-completed beat. The bug
+ * this guards against: a correct MC answer marks the beat done synchronously
+ * but schedules the actual `advanceTo` 600ms later via `setTimeout`. The
+ * persistence effect runs in between — so if the user refreshes or closes
+ * the tab during that window, the saved snapshot has `activeIdx = N` with
+ * `doneIds` already containing N. On resume that lands them on a "done"
+ * cell whose `next` cell is still locked: stuck.
+ *
+ * Walk forward past any contiguous run of done beats starting at the saved
+ * `activeIdx`. Clamp at `beats.length - 1` so we never run off the end.
+ * The persisted snapshot is otherwise returned verbatim — only `activeIdx`
+ * is touched (and only when a correction is actually needed; otherwise we
+ * return the input unchanged for cheap identity equality).
+ */
+export function correctedLessonState(
+  state: PersistedLessonState,
+  beats: readonly { readonly id: BeatId }[],
+): PersistedLessonState {
+  if (state.activeIdx < 0 || state.activeIdx >= beats.length) return state;
+  const doneSet = new Set<BeatId>(state.doneIds);
+  let idx = state.activeIdx;
+  while (idx < beats.length - 1 && doneSet.has(beats[idx].id)) {
+    idx += 1;
+  }
+  if (idx === state.activeIdx) return state;
+  return { ...state, activeIdx: idx };
 }
 
 /** True if the persisted snapshot represents meaningful progress (anything

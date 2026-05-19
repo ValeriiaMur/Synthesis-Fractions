@@ -25,6 +25,9 @@ export function isBeatComplete(
   if (m.kind === 'fractionbox' && state.kind === 'fractionbox') {
     return state.combos >= m.minCombos;
   }
+  if (m.kind === 'blockstudio' && state.kind === 'blockstudio') {
+    return state.completed;
+  }
   return false;
 }
 

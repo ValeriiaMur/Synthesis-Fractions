@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   SCHEMA_VERSION,
+  correctedLessonState,
   decodeLessonState,
   hasMeaningfulProgress,
   snapshotLesson,
   storageKey,
 } from './lessonPersistence';
 import type { PersistedLessonState } from './lessonPersistence';
+import type { BeatId } from './types';
 
 const LESSON_ID = 'fraction-equivalence-v1';
 
@@ -131,6 +133,94 @@ describe('decodeLessonState — defensive parsing', () => {
     });
     const decoded = decodeLessonState(raw, LESSON_ID);
     expect(decoded?.chat).toEqual([{ from: 'ari', text: 'good' }]);
+  });
+});
+
+describe('correctedLessonState', () => {
+  const beats: readonly { id: BeatId }[] = [
+    { id: 'chocolate_intro' },
+    { id: 'chocolate_check' },
+    { id: 'pizza_explore' },
+    { id: 'pizza_check' },
+    { id: 'paper_fold_final' },
+    { id: 'fraction_box_explore' },
+  ];
+
+  it('returns the state unchanged when the active beat is not done', () => {
+    const snap = snapshotLesson(LESSON_ID, {
+      ...baseInput,
+      activeIdx: 2,
+      doneIds: ['chocolate_intro', 'chocolate_check'],
+    });
+    const fixed = correctedLessonState(snap, beats);
+    expect(fixed).toBe(snap);
+  });
+
+  it('advances activeIdx past a single done beat that the snapshot was stuck on', () => {
+    // Mirrors the real bug: correct MC fires, doneSet adds the beat, snapshot
+    // is written, then a refresh interrupts the 600ms setTimeout that would
+    // have called advanceTo. activeIdx is still N, but N is already done.
+    const snap = snapshotLesson(LESSON_ID, {
+      ...baseInput,
+      activeIdx: 1,
+      doneIds: ['chocolate_intro', 'chocolate_check'],
+    });
+    const fixed = correctedLessonState(snap, beats);
+    expect(fixed.activeIdx).toBe(2);
+  });
+
+  it('walks past a contiguous run of done beats', () => {
+    const snap = snapshotLesson(LESSON_ID, {
+      ...baseInput,
+      activeIdx: 0,
+      doneIds: [
+        'chocolate_intro',
+        'chocolate_check',
+        'pizza_explore',
+      ],
+    });
+    const fixed = correctedLessonState(snap, beats);
+    expect(fixed.activeIdx).toBe(3);
+  });
+
+  it('clamps at the last beat when every beat is done', () => {
+    const snap = snapshotLesson(LESSON_ID, {
+      ...baseInput,
+      activeIdx: 0,
+      doneIds: beats.map((b) => b.id),
+    });
+    const fixed = correctedLessonState(snap, beats);
+    expect(fixed.activeIdx).toBe(beats.length - 1);
+  });
+
+  it('preserves all other fields verbatim', () => {
+    const snap = snapshotLesson(LESSON_ID, {
+      ...baseInput,
+      activeIdx: 1,
+      doneIds: ['chocolate_intro', 'chocolate_check'],
+    });
+    const fixed = correctedLessonState(snap, beats);
+    expect(fixed.doneIds).toEqual(snap.doneIds);
+    expect(fixed.mcSel).toEqual(snap.mcSel);
+    expect(fixed.mcStatus).toEqual(snap.mcStatus);
+    expect(fixed.hintAttempts).toEqual(snap.hintAttempts);
+    expect(fixed.manipStates).toEqual(snap.manipStates);
+    expect(fixed.liveHints).toEqual(snap.liveHints);
+    expect(fixed.scaffoldedMC).toEqual(snap.scaffoldedMC);
+    expect(fixed.chat).toEqual(snap.chat);
+    expect(fixed.lessonId).toBe(snap.lessonId);
+    expect(fixed.schemaVersion).toBe(snap.schemaVersion);
+  });
+
+  it('does nothing when activeIdx is past the beats array', () => {
+    // Defensive: shouldn't crash if persisted state is somehow out of range.
+    const snap = snapshotLesson(LESSON_ID, {
+      ...baseInput,
+      activeIdx: 99,
+      doneIds: [],
+    });
+    const fixed = correctedLessonState(snap, beats);
+    expect(fixed.activeIdx).toBe(99);
   });
 });
 

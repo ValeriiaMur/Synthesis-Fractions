@@ -41,11 +41,25 @@ export type FractionBoxConfig = {
   readonly minCombos: number;
 };
 
+export type BlockStudioStepId = 'play' | 'compare' | 'quest';
+export type BlockStudioQuestId = 'q1' | 'q2' | 'q3';
+
+export type BlockStudioConfig = {
+  readonly kind: 'blockstudio';
+  /** Available unit fractions in the palette. */
+  readonly palette: readonly FractionBoxPaletteEntry[];
+  /** Step ids to include. Default ['play','compare','quest']. */
+  readonly steps: readonly BlockStudioStepId[];
+  /** Quest ids to include, in order. */
+  readonly quests: readonly BlockStudioQuestId[];
+};
+
 export type ManipulativeConfig =
   | ChocolateBarConfig
   | PizzaConfig
   | PaperConfig
-  | FractionBoxConfig;
+  | FractionBoxConfig
+  | BlockStudioConfig;
 
 export type MCOption = {
   readonly id: string;
@@ -108,11 +122,27 @@ export type FractionBoxState = {
   readonly combos: number;
 };
 
+export type BlockStudioRailSnapshot = {
+  readonly id: string;
+  readonly bars: readonly FractionBoxBar[];
+};
+
+export type BlockStudioState = {
+  readonly kind: 'blockstudio';
+  readonly stepIdx: number;
+  readonly questIdx: number;
+  readonly maxStepReached: number;
+  readonly rails: readonly BlockStudioRailSnapshot[];
+  readonly questsDone: number;
+  readonly completed: boolean;
+};
+
 export type ManipulativeState =
   | ChocolateState
   | PizzaState
   | PaperState
-  | FractionBoxState;
+  | FractionBoxState
+  | BlockStudioState;
 
 export type LessonState = {
   readonly currentBeatId: BeatId;

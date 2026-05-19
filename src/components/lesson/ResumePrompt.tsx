@@ -9,7 +9,7 @@ export type ResumePromptProps = {
 };
 
 /**
- * Centered card shown when a returning learner has a saved Skiff run.
+ * Centered card shown when a returning learner has a saved Spirit run.
  * One pair of buttons — Resume vs Start Over. Matches the cosmos palette
  * and the NamePrompt's geometry so the two reads as the same family.
  */
@@ -55,7 +55,7 @@ export function ResumePrompt({
             marginBottom: 16,
           }}
         >
-          ✦ skiff run in progress
+          ✦ spirit run in progress
         </div>
         <h2
           style={{
@@ -80,7 +80,7 @@ export function ResumePrompt({
             lineHeight: 1.55,
           }}
         >
-          The Skiff is sitting where you left it — at stop{' '}
+          The Spirit is sitting where you left it — at stop{' '}
           <span style={{ color: 'var(--ink)' }}>{padded}</span> of{' '}
           <span style={{ color: 'var(--ink-mute)' }}>{total}</span>. Pick up
           the run, or wipe it and start a fresh trip.

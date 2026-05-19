@@ -44,5 +44,9 @@ export function validateManipulative(
     return { correct: state.combos >= config.minCombos };
   }
 
+  if (config.kind === 'blockstudio' && state.kind === 'blockstudio') {
+    return { correct: state.completed };
+  }
+
   return { correct: false, reason: 'unhandled-manipulative-kind' };
 }

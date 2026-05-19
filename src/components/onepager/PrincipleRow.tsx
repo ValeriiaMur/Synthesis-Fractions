@@ -17,6 +17,10 @@ export type PrincipleRowProps = {
   readonly body: ReactNode;
   readonly demo: ReactNode;
   readonly reverse?: boolean;
+  /** Optional masthead rendered above the principle content. Used on the
+   *  first principle to host the section eyebrow + heading + lede that
+   *  used to live in a dedicated intro screen. */
+  readonly intro?: ReactNode;
 };
 
 /**
@@ -35,6 +39,7 @@ export function PrincipleRow({
   body,
   demo,
   reverse = false,
+  intro,
 }: PrincipleRowProps) {
   const ref = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
@@ -77,12 +82,13 @@ export function PrincipleRow({
     <section
       id={`p-${num}`}
       ref={ref}
-      className={`principle-stage snap ${reverse ? 'reverse' : ''} ${side} ${inView ? 'in-view' : ''}`}
+      className={`principle-stage snap ${reverse ? 'reverse' : ''} ${side} ${inView ? 'in-view' : ''}${intro ? ' has-intro' : ''}`}
       data-screen-label={`principle ${num}`}
     >
       <span className="principle-ghost-num" style={ghostStyle}>
         {num}
       </span>
+      {intro ? <div className="principle-stage-intro">{intro}</div> : null}
       <div className="inner">
         <div className="principle-text">
           <div className="principle-num-row">

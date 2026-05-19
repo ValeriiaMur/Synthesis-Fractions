@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ChocolatePiece } from '@/components/manipulatives/ChocolatePiece';
 
 type QuarterProps = {
   readonly onTap: () => void;
@@ -17,32 +18,14 @@ function Quarter({ onTap, location }: QuarterProps) {
         width: 56,
         height: 56,
         border: 0,
+        padding: 0,
+        background: 'transparent',
         cursor: 'pointer',
-        borderRadius: 10,
-        background:
-          'linear-gradient(135deg, #6e3a1c 0%, #8a4622 30%, #5d2f17 100%)',
-        boxShadow:
-          location === 'ref'
-            ? '0 0 0 2px rgba(95,216,151,0.45), 0 8px 16px -4px rgba(0,0,0,0.6)'
-            : 'inset 0 2px 0 rgba(255,255,255,0.08), inset 0 -2px 0 rgba(0,0,0,0.35), 0 8px 16px -4px rgba(0,0,0,0.5)',
-        position: 'relative',
         transition: 'transform .25s cubic-bezier(.4,1.4,.55,1)',
       }}
     >
-      <svg
-        viewBox="0 0 56 56"
-        width="100%"
-        height="100%"
-        style={{ position: 'absolute', inset: 0 }}
-        aria-hidden
-      >
-        <path
-          d="M0 19 L56 19 M0 37 L56 37 M19 0 L19 56 M37 0 L37 56"
-          stroke="rgba(0,0,0,0.35)"
-          strokeWidth={1}
-          fill="none"
-        />
-      </svg>
+      {/* alt="" — accessible name comes from the button's aria-label. */}
+      <ChocolatePiece size={56} placed={location === 'ref'} alt="" />
     </button>
   );
 }

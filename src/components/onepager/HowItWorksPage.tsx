@@ -11,9 +11,10 @@ import {
   type ActivePrincipleInput,
 } from '@/hooks/useActivePrinciple';
 import { AmbientGlow } from './AmbientGlow';
+import { AmbientAudio } from './AmbientAudio';
 import { Hero } from './Hero';
 import { ScrollProgress } from './ScrollProgress';
-import { ScrollDownInvite } from './ScrollDownInvite';
+import { ScrollTopButton } from './ScrollTopButton';
 import { SideRail, type PrincipleNav } from './SideRail';
 import { PrincipleRow } from './PrincipleRow';
 import { FinalCTA } from './FinalCTA';
@@ -31,6 +32,29 @@ type Principle = PrincipleNav & {
   readonly demo: ReactNode;
   readonly reverse: boolean;
 };
+
+/** Masthead that opens the principles arc — eyebrow, thesis, lede. Rendered
+ *  inside the first PrincipleRow so the visitor lands directly on principle 01
+ *  with the framing copy overhead instead of on a separate intro screen. */
+function PrinciplesIntro() {
+  return (
+    <div id="principles" className="principles-intro">
+      <div className="section-title">
+        eight principles · borrowed from maria montessori
+      </div>
+      <h2>
+        We didn&rsquo;t invent these.{' '}
+        <span style={{ color: 'var(--ink-mute)' }}>
+          A child does the work; the material teaches; the adult observes.
+        </span>
+      </h2>
+      <p className="lede">
+        Each principle below is interactive — toggle, drag, or scroll to see
+        how it lands in our lesson.
+      </p>
+    </div>
+  );
+}
 
 const PRINCIPLES: readonly Principle[] = [
   {
@@ -130,27 +154,12 @@ export function HowItWorksPage() {
       <AmbientGlow color={active.color} />
 
       <ScrollProgress />
+      <ScrollTopButton />
+      <AmbientAudio />
 
       <Hero />
 
       <SideRail principles={PRINCIPLES} />
-
-      <section id="principles" className="section">
-        <div className="section-title">
-          eight principles · borrowed from maria montessori
-        </div>
-        <h2>
-          We didn&rsquo;t invent these.{' '}
-          <span style={{ color: 'var(--ink-mute)' }}>
-            A child does the work; the material teaches; the adult observes.
-          </span>
-        </h2>
-        <p className="lede">
-          Each principle below is interactive — toggle, drag, or scroll to see
-          how it lands in our lesson.
-        </p>
-        <ScrollDownInvite href="#p-01" label="please, keep scrolling" />
-      </section>
 
       {PRINCIPLES.map((p, i) => (
         <PrincipleRow
@@ -162,6 +171,7 @@ export function HowItWorksPage() {
           body={p.body}
           demo={p.demo}
           reverse={p.reverse}
+          intro={i === 0 ? <PrinciplesIntro /> : undefined}
         />
       ))}
 

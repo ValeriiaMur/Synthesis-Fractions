@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChocolateState } from '@/lib/lesson/types';
 import { Caption } from './Caption';
 import { Fraction } from './Fraction';
+import { ChocolatePiece } from './ChocolatePiece';
 
 type PieceLocation = 'bar' | 'ref';
 
@@ -70,41 +71,16 @@ export function ChocolateBar({ value, onChange, disabled }: ChocolateBarProps) {
       style={{
         width: 84,
         height: 84,
-        borderRadius: 14,
         border: 0,
-        background:
-          'linear-gradient(135deg, #6e3a1c 0%, #8a4622 30%, #5d2f17 100%)',
-        position: 'relative',
+        padding: 0,
+        background: 'transparent',
         cursor: disabled ? 'default' : 'pointer',
-        boxShadow:
-          location === 'ref'
-            ? '0 0 0 2px rgba(95,216,151,0.45), 0 12px 24px -8px rgba(0,0,0,0.6)'
-            : 'inset 0 2px 0 rgba(255,255,255,0.10), inset 0 -2px 0 rgba(0,0,0,0.35), 0 10px 20px -8px rgba(0,0,0,0.5)',
-        transition:
-          'transform .25s cubic-bezier(.4,1.4,.55,1), box-shadow .2s',
+        transition: 'transform .25s cubic-bezier(.4,1.4,.55,1)',
       }}
     >
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 84 84"
-        style={{ position: 'absolute', inset: 0 }}
-        aria-hidden
-      >
-        <path
-          d="M0 28 L84 28 M0 56 L84 56 M28 0 L28 84 M56 0 L56 84"
-          stroke="rgba(0,0,0,0.35)"
-          strokeWidth="1.2"
-          fill="none"
-        />
-        <path
-          d="M0 28 L84 28 M0 56 L84 56 M28 0 L28 84 M56 0 L56 84"
-          stroke="rgba(255,255,255,0.06)"
-          strokeWidth="1"
-          fill="none"
-          transform="translate(1 1)"
-        />
-      </svg>
+      {/* alt="" — the button's aria-label already supplies the
+          accessible name; the chocolate image is decorative. */}
+      <ChocolatePiece size={84} placed={location === 'ref'} alt="" />
     </button>
   );
 

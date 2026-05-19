@@ -2,11 +2,21 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PaperFold } from './PaperFold';
 
+/**
+ * The PaperFold manipulative is interaction-rich (pointer-drag folds the
+ * paper in 3D). For unit testing we exercise the keyboard fallback on
+ * the corner handle (Enter / Space = advance one fold) and the panel
+ * buttons (unfold, start over). Drag math is verified visually.
+ *
+ * The external contract — `onChange({ kind: 'paper', folds })` with
+ * `folds` an ordered array of 'horizontal' | 'vertical' — must stay
+ * stable: the lesson's `paper_fold_final` beat completes on
+ * `folds.length >= targetFolds.length`.
+ */
 describe('PaperFold', () => {
-  it('renders an unfolded paper square with no creases on mount', () => {
+  it('renders the paper workspace on mount', () => {
     render(<PaperFold onChange={() => {}} />);
-    expect(screen.getByLabelText('Paper square')).toBeInTheDocument();
-    expect(screen.queryAllByTestId('crease')).toHaveLength(0);
+    expect(screen.getByLabelText(/paper square/i)).toBeInTheDocument();
   });
 
   it('reports an empty fold list on mount', () => {
@@ -15,52 +25,78 @@ describe('PaperFold', () => {
     expect(onChange).toHaveBeenCalledWith({ kind: 'paper', folds: [] });
   });
 
-  it('adds the horizontal crease on the first tap', () => {
+  it('adds the horizontal fold when the corner is activated by keyboard', () => {
     const onChange = vi.fn();
     render(<PaperFold onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: /fold paper/i }));
-    expect(screen.getAllByTestId('crease')).toHaveLength(1);
+    const corner = screen.getByRole('button', { name: /drag this corner/i });
+    fireEvent.keyDown(corner, { key: 'Enter' });
     expect(onChange).toHaveBeenLastCalledWith({
       kind: 'paper',
       folds: ['horizontal'],
     });
   });
 
-  it('adds both creases by the second tap', () => {
+  it('adds the vertical fold on the second keyboard activation', () => {
     const onChange = vi.fn();
     render(<PaperFold onChange={onChange} />);
-    const paper = screen.getByRole('button', { name: /fold paper/i });
-    fireEvent.click(paper);
-    fireEvent.click(paper);
-    expect(screen.getAllByTestId('crease')).toHaveLength(2);
+    fireEvent.keyDown(screen.getByRole('button', { name: /drag this corner/i }), {
+      key: 'Enter',
+    });
+    fireEvent.keyDown(screen.getByRole('button', { name: /drag this corner/i }), {
+      key: 'Enter',
+    });
     expect(onChange).toHaveBeenLastCalledWith({
       kind: 'paper',
       folds: ['horizontal', 'vertical'],
     });
   });
 
-  it('resets to no folds on the third tap', () => {
+  it('hydrates from a provided value', () => {
     const onChange = vi.fn();
-    render(<PaperFold onChange={onChange} />);
-    const paper = screen.getByRole('button', { name: /fold paper/i });
-    fireEvent.click(paper);
-    fireEvent.click(paper);
-    fireEvent.click(paper);
-    expect(screen.queryAllByTestId('crease')).toHaveLength(0);
+    render(
+      <PaperFold
+        value={{ kind: 'paper', folds: ['horizontal'] }}
+        onChange={onChange}
+      />,
+    );
+    expect(onChange).toHaveBeenCalledWith({
+      kind: 'paper',
+      folds: ['horizontal'],
+    });
+  });
+
+  it('steps back one fold when "unfold" is pressed', () => {
+    const onChange = vi.fn();
+    render(
+      <PaperFold
+        value={{ kind: 'paper', folds: ['horizontal', 'vertical'] }}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /unfold/i }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      kind: 'paper',
+      folds: ['horizontal'],
+    });
+  });
+
+  it('clears all folds when "start over" is pressed', () => {
+    const onChange = vi.fn();
+    render(
+      <PaperFold
+        value={{ kind: 'paper', folds: ['horizontal', 'vertical'] }}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /start over/i }));
     expect(onChange).toHaveBeenLastCalledWith({ kind: 'paper', folds: [] });
   });
 
-  it('clears folds when the reset button is pressed', () => {
-    render(<PaperFold onChange={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /fold paper/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^reset$/i }));
-    expect(screen.queryAllByTestId('crease')).toHaveLength(0);
-  });
-
-  it('ignores taps when disabled', () => {
+  it('ignores corner-handle activations when disabled', () => {
     const onChange = vi.fn();
     render(<PaperFold onChange={onChange} disabled />);
-    fireEvent.click(screen.getByRole('button', { name: /fold paper/i }));
+    const corner = screen.getByRole('button', { name: /drag this corner/i });
+    fireEvent.keyDown(corner, { key: 'Enter' });
     expect(onChange).toHaveBeenLastCalledWith({ kind: 'paper', folds: [] });
   });
 });

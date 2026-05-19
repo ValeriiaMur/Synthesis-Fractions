@@ -6,8 +6,6 @@ import {
   CHAT_SYSTEM,
   HINT_FEW_SHOT,
   HINT_SYSTEM,
-  PARAPHRASE_FEW_SHOT,
-  PARAPHRASE_SYSTEM,
   REFLECTION_FEW_SHOT,
   REFLECTION_SYSTEM,
   SCAFFOLD_FEW_SHOT,
@@ -16,11 +14,6 @@ import {
 
 const ALL = [
   { name: 'hint', system: HINT_SYSTEM, fewShot: HINT_FEW_SHOT },
-  {
-    name: 'paraphrase',
-    system: PARAPHRASE_SYSTEM,
-    fewShot: PARAPHRASE_FEW_SHOT,
-  },
   {
     name: 'reflection',
     system: REFLECTION_SYSTEM,

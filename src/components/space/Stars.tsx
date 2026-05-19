@@ -34,9 +34,10 @@ type CssVars = CSSProperties & {
 /**
  * Deterministic star field rendered as SVG dots.
  * Same seed → same field, so SSR matches client. Each star has its own
- * twinkle cycle duration (3–7s) and phase offset (0–6s) so the field
- * shimmers softly without any two stars pulsing in lockstep. The base
- * opacity is exposed as `--o`; globals.css drives the keyframe.
+ * twinkle cycle duration (3–7s) and phase offset (0–5s) so the field
+ * shimmers visibly without any two stars pulsing in lockstep. The base
+ * opacity is exposed as `--o`; globals.css drives the keyframe — a
+ * 35 %→110 % opacity swing paired with a small scale pop.
  */
 export function Stars({ count = 80 }: StarsProps) {
   const dots = useMemo<readonly StarDot[]>(() => {
@@ -48,7 +49,7 @@ export function Stars({ count = 80 }: StarsProps) {
       o: 0.2 + r() * 0.6,
       s: 0.4 + r() * 1.2,
       dur: 3 + r() * 4,
-      delay: r() * 6,
+      delay: r() * 5,
     }));
   }, [count]);
 

@@ -1,7 +1,7 @@
 // Server-only. The lesson agent: a LangGraph StateGraph routed by task type.
 //
 // Entry point: runLessonAgent({ task, payload }, { llm })
-// Nodes: hint | paraphrase | classify_reflection | scaffold_mc | advance_to_beat | chat
+// Nodes: hint | classify_reflection | scaffold_mc | advance_to_beat | chat
 // All nodes share the Montessori discipline floor (no praise-bombing).
 //
 // Streaming chat lives OUTSIDE the graph: the SSE route imports
@@ -21,8 +21,6 @@ import {
   CHAT_SYSTEM,
   HINT_FEW_SHOT,
   HINT_SYSTEM,
-  PARAPHRASE_FEW_SHOT,
-  PARAPHRASE_SYSTEM,
   REFLECTION_FEW_SHOT,
   REFLECTION_SYSTEM,
   SCAFFOLD_FEW_SHOT,
@@ -38,11 +36,6 @@ export type HintPayload = {
   readonly correctOptionLabel: string;
   readonly selectedOptionLabel: string;
   readonly attemptCount: number;
-};
-
-export type ParaphrasePayload = {
-  readonly beatId: BeatId;
-  readonly originalProse: string;
 };
 
 export type ReflectionCategory = 'on-topic' | 'partial' | 'off-topic';
@@ -95,7 +88,6 @@ export type ChatPayload = {
 
 export type LessonAgentInput =
   | { readonly task: 'hint'; readonly payload: HintPayload }
-  | { readonly task: 'paraphrase'; readonly payload: ParaphrasePayload }
   | {
       readonly task: 'classify_reflection';
       readonly payload: ReflectionPayload;
@@ -106,7 +98,6 @@ export type LessonAgentInput =
 
 export type LessonAgentOutput = {
   readonly hint?: string;
-  readonly paraphrasedProse?: string;
   readonly reflectionCategory?: ReflectionCategory;
   readonly reflectionReaction?: string;
   readonly scaffoldedMC?: ScaffoldedMC;
@@ -214,26 +205,6 @@ async function hintNode(
   if (!text) throw new Error('hintNode: empty model response');
   assertNoPraise(text, 'hintNode');
   return { hint: text };
-}
-
-async function paraphraseNode(
-  payload: ParaphrasePayload,
-  llm: ChatModelLike,
-): Promise<{ readonly paraphrasedProse: string }> {
-  const user = [
-    `Beat id: ${payload.beatId}.`,
-    `Original paragraph:`,
-    payload.originalProse,
-    `Rewrite the paragraph now.`,
-  ].join('\n');
-
-  const response = await llm.invoke(
-    buildMessages(PARAPHRASE_SYSTEM, PARAPHRASE_FEW_SHOT, user),
-  );
-  const text = extractText(response.content).trim();
-  if (!text) throw new Error('paraphraseNode: empty model response');
-  assertNoPraise(text, 'paraphraseNode');
-  return { paraphrasedProse: text };
 }
 
 const REFLECTION_CATEGORIES: ReadonlyArray<ReflectionCategory> = [
@@ -463,15 +434,6 @@ function buildLessonGraph(llm: ChatModelLike) {
     return { output: await hintNode(state.input.payload, llm) };
   };
 
-  const paraphrase = async (
-    state: AgentGraphState,
-  ): Promise<Partial<AgentGraphState>> => {
-    if (state.input.task !== 'paraphrase') {
-      throw new Error('paraphrase node invoked for non-paraphrase task');
-    }
-    return { output: await paraphraseNode(state.input.payload, llm) };
-  };
-
   const classifyReflection = async (
     state: AgentGraphState,
   ): Promise<Partial<AgentGraphState>> => {
@@ -510,21 +472,18 @@ function buildLessonGraph(llm: ChatModelLike) {
 
   return new StateGraph(AgentAnnotation)
     .addNode('hint', hint)
-    .addNode('paraphrase', paraphrase)
     .addNode('classify_reflection', classifyReflection)
     .addNode('scaffold_mc', scaffoldMC)
     .addNode('advance_to_beat', advanceToBeat)
     .addNode('chat', chat)
     .addConditionalEdges(START, (state: AgentGraphState) => state.input.task, {
       hint: 'hint',
-      paraphrase: 'paraphrase',
       classify_reflection: 'classify_reflection',
       scaffold_mc: 'scaffold_mc',
       advance_to_beat: 'advance_to_beat',
       chat: 'chat',
     })
     .addEdge('hint', END)
-    .addEdge('paraphrase', END)
     .addEdge('classify_reflection', END)
     .addEdge('scaffold_mc', END)
     .addEdge('advance_to_beat', END)

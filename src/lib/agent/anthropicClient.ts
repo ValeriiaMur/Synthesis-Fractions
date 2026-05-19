@@ -10,7 +10,7 @@ import type { ChatModelLike } from './generateHint';
 
 const MODEL = 'claude-haiku-4-5';
 
-/** Default LLM used by every blocking node in the agent (hint, paraphrase,
+/** Default LLM used by every blocking node in the agent (hint,
  *  classify_reflection, scaffold_mc, advance_to_beat, chat-blocking). */
 export function getHintLLM(): ChatModelLike {
   return new ChatAnthropic({
