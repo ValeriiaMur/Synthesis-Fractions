@@ -12,6 +12,7 @@ import {
 } from '@/hooks/useActivePrinciple';
 import { AmbientGlow } from './AmbientGlow';
 import { AmbientAudio } from './AmbientAudio';
+import { Unveil } from './Unveil';
 import { Hero } from './Hero';
 import { ScrollProgress } from './ScrollProgress';
 import { ScrollTopButton } from './ScrollTopButton';
@@ -147,35 +148,41 @@ export function HowItWorksPage() {
   }, []);
 
   return (
-    <div className="page cosmos-bg">
-      <GridBg large />
-      <Stars count={120} />
-      <Doodles />
-      <AmbientGlow color={active.color} />
+    <>
+      {/* Sibling, not wrapper: the unveil floats over the page while the
+          page itself fades in underneath via `.page-reveal`. Plays once per
+          browser session — subsequent navigations get the page directly. */}
+      <Unveil />
+      <div className="page page-reveal cosmos-bg">
+        <GridBg large />
+        <Stars count={120} />
+        <Doodles />
+        <AmbientGlow color={active.color} />
 
-      <ScrollProgress />
-      <ScrollTopButton />
-      <AmbientAudio />
+        <ScrollProgress />
+        <ScrollTopButton />
+        <AmbientAudio />
 
-      <Hero />
+        <Hero />
 
-      <SideRail principles={PRINCIPLES} />
+        <SideRail principles={PRINCIPLES} />
 
-      {PRINCIPLES.map((p, i) => (
-        <PrincipleRow
-          key={p.num}
-          idx={i}
-          num={p.num}
-          color={p.color}
-          title={p.title}
-          body={p.body}
-          demo={p.demo}
-          reverse={p.reverse}
-          intro={i === 0 ? <PrinciplesIntro /> : undefined}
-        />
-      ))}
+        {PRINCIPLES.map((p, i) => (
+          <PrincipleRow
+            key={p.num}
+            idx={i}
+            num={p.num}
+            color={p.color}
+            title={p.title}
+            body={p.body}
+            demo={p.demo}
+            reverse={p.reverse}
+            intro={i === 0 ? <PrinciplesIntro /> : undefined}
+          />
+        ))}
 
-      <FinalCTA />
-    </div>
+        <FinalCTA />
+      </div>
+    </>
   );
 }

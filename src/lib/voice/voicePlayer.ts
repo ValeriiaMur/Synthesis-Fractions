@@ -23,7 +23,14 @@ export type VoicePlayer = {
 
 export type VoicePlayerDeps = {
   readonly fetchAudio: (text: string) => Promise<Blob>;
-  readonly play: (blob: Blob) => Promise<void>;
+  /** Plays the blob to natural end. If `opts.signal` is passed and gets
+   *  aborted mid-playback, the implementation should stop the audio and
+   *  resolve the promise. `stop()` uses this to cut Ari mid-sentence when
+   *  the lesson page unmounts so audio doesn't bleed into the home page. */
+  readonly play: (
+    blob: Blob,
+    opts?: { readonly signal?: AbortSignal },
+  ) => Promise<void>;
   readonly storage: {
     readonly get: () => boolean;
     readonly set: (muted: boolean) => void;
@@ -34,6 +41,10 @@ export function createVoicePlayer(deps: VoicePlayerDeps): VoicePlayer {
   const queue: string[] = [];
   let muted = deps.storage.get();
   let draining = false;
+  /** AbortController for the currently-playing utterance. `stop()` aborts
+   *  it so the in-flight `<audio>` cuts mid-line instead of running to
+   *  natural end. Null when nothing is playing. */
+  let currentAbort: AbortController | null = null;
   const listeners = new Set<(muted: boolean) => void>();
 
   const notify = (): void => {
@@ -61,11 +72,14 @@ export function createVoicePlayer(deps: VoicePlayerDeps): VoicePlayer {
           queue.length = 0;
           return;
         }
+        const ac = new AbortController();
+        currentAbort = ac;
         try {
-          await deps.play(blob);
+          await deps.play(blob, { signal: ac.signal });
         } catch {
           // Playback failed (autoplay block, decode error). Move on.
         }
+        currentAbort = null;
       }
     } finally {
       draining = false;
@@ -82,6 +96,10 @@ export function createVoicePlayer(deps: VoicePlayerDeps): VoicePlayer {
 
   const stop = (): void => {
     queue.length = 0;
+    if (currentAbort) {
+      currentAbort.abort();
+      currentAbort = null;
+    }
   };
 
   const setMuted = (next: boolean): void => {
@@ -130,11 +148,25 @@ function defaultStorage(): VoicePlayerDeps['storage'] {
   };
 }
 
-async function playBlob(blob: Blob): Promise<void> {
+async function playBlob(
+  blob: Blob,
+  opts?: { readonly signal?: AbortSignal },
+): Promise<void> {
   const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
   try {
     await new Promise<void>((resolve, reject) => {
-      const audio = new Audio(url);
+      if (opts?.signal?.aborted) {
+        audio.pause();
+        resolve();
+        return;
+      }
+      const onAbort = (): void => {
+        audio.pause();
+        audio.src = '';
+        resolve();
+      };
+      opts?.signal?.addEventListener('abort', onAbort, { once: true });
       audio.onended = () => resolve();
       audio.onerror = () => reject(new Error('audio playback failed'));
       // play() returns a Promise; rejection means the browser blocked it.

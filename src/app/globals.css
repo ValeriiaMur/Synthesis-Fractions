@@ -410,17 +410,21 @@ input {
   overflow: hidden;
 }
 
-/* ----------- top bar ----------- */
+/* ----------- top bar -----------
+   The 44px icon buttons need clearance from the viewport top so they
+   don't sit flush against browser/system chrome and look clipped. We
+   give the bar 80px of total height (44px button + 18px above + 18px
+   below) and the .stage offset below matches. */
 .topbar {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 64px;
+  height: 80px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 16px 28px 0 28px;
   z-index: 30;
 }
 
@@ -517,7 +521,7 @@ input {
    them at the moment. */
 .stage {
   position: absolute;
-  top: 64px;
+  top: 80px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -533,6 +537,30 @@ input {
   scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* Right-aligned student-response echo inside a cell. Closes the
+   conversational rhythm started by `<Prose>` (tutor) at the top of the
+   cell — see StudentEcho.tsx. */
+.student-echo {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--ink-mute);
+}
+.student-echo-label {
+  font-family: var(--font-jetbrains-mono), JetBrains Mono, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.student-echo-body {
+  font-weight: 400;
+  color: var(--ink-soft);
 }
 
 /* "▸ cell 02 unlocked" inline separator between cells (used to live in
@@ -1777,11 +1805,11 @@ input {
    Shrink letter-spacing first, then drop the textual tag on phones. */
 @media (max-width: 900px) {
   .topbar {
-    padding: 0 18px;
-    height: 60px;
+    padding: 12px 18px 0 18px;
+    height: 72px;
   }
   .stage {
-    top: 60px;
+    top: 72px;
   }
   .lesson-tag {
     font-size: 11px;
@@ -2748,5 +2776,98 @@ html.snap-scroll {
 @media (prefers-reduced-motion: reduce) {
   .name-prompt-card {
     animation: none !important;
+  }
+}
+
+/* =========================================================
+   Unveil — on-load intro overlay for the home page.
+   A small dark-navy square grows from the centre of a cream
+   viewport until it fills the screen and "becomes" the page
+   underneath. Plays once per session — see Unveil.tsx for the
+   sessionStorage gate. The CSS uses a sibling combinator
+   (`.unveil ~ .page-reveal`) so the page-reveal opacity-0 only
+   applies WHILE the overlay is mounted; on repeat visits the
+   <Unveil> returns null, the selector misses, and the page is
+   visible immediately with no animated delay.
+   ========================================================= */
+.unveil {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #f6f4ee;                /* cream backdrop */
+  display: grid;
+  place-items: center;
+  pointer-events: none;               /* never blocks interaction */
+  animation: unveilBgOut 0.3s ease forwards;
+  animation-delay: 1.55s;
+}
+
+.unveil-square {
+  width: 9vmin;
+  height: 9vmin;
+  background: var(--bg-0);            /* exactly matches the page bg */
+  border-radius: 10px;
+  box-shadow: 0 18px 50px -8px rgba(5, 10, 32, 0.35);
+  animation: unveilSquareGrow 1.7s cubic-bezier(0.55, 0, 0.15, 1) forwards;
+  transform-origin: center;
+  opacity: 0;
+}
+
+@keyframes unveilSquareGrow {
+  0%   { transform: scale(0);  opacity: 0; }
+  18%  { transform: scale(1);  opacity: 1; }
+  100% { transform: scale(80); opacity: 1; }
+}
+
+.unveil-tag {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  color: #ffffff;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: unveilTag 1s ease 0.5s forwards;
+  z-index: 2;
+}
+
+@keyframes unveilTag {
+  0%   { opacity: 0; letter-spacing: 0.20em; transform: translate(-50%, -50%); }
+  35%  { opacity: 1; letter-spacing: 0.32em; transform: translate(-50%, -50%); }
+  60%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%); }
+}
+
+@keyframes unveilBgOut {
+  0%   { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+/* Scoped to the unveil's lifetime: only fade/scale the page in while the
+   overlay is the page's previous sibling. After Unveil unmounts (1.9s)
+   the animation has already finished (forwards), so the page stays at
+   opacity 1. On repeat visits Unveil returns null and this rule does not
+   match, so the page renders fully visible from the first frame. */
+.unveil ~ .page-reveal {
+  animation: unveilPageReveal 0.8s ease forwards;
+  animation-delay: 1.5s;
+  opacity: 0;
+}
+
+@keyframes unveilPageReveal {
+  from { opacity: 0; transform: scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unveil {
+    display: none;
+  }
+  .unveil ~ .page-reveal {
+    animation: none;
+    opacity: 1;
   }
 }

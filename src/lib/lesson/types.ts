@@ -66,11 +66,33 @@ export type MCOption = {
   readonly label: string;
 };
 
+/** A two-option scaffolded version of the MC, offered after N wrongs.
+ *  Authored, not LLM-generated. The `correctOptionId` must reference an
+ *  option in `options`; the other option is the chosen distractor. */
+export type ScaffoldedMC = {
+  readonly question: string;
+  readonly options: readonly [MCOption, MCOption];
+  readonly correctOptionId: string;
+};
+
 export type MCConfig = {
   readonly question: string;
   readonly options: readonly MCOption[];
   readonly correctOptionId: string;
+  /** Escalating hints indexed by 0-based attempt number. The last entry
+   *  is used for any attempt beyond its index — hints don't run out. */
   readonly canonicalHints: readonly string[];
+  /** Optional per-wrong-option hint. When the kid picks a specific wrong
+   *  option, this takes precedence over the attempt-indexed hint. */
+  readonly hintByWrongOption?: Readonly<Record<string, string>>;
+  /** What the tutor says when the kid picks the correct option. May
+   *  contain `{name}` slot. */
+  readonly correctReply: string;
+  /** Authored 2-option simplified version offered after the kid hits
+   *  the wrong-attempt threshold (default 3). Optional — if absent, the
+   *  scaffold step is skipped and the kid keeps wrestling with the
+   *  full MC (canonical hints continue to escalate). */
+  readonly scaffolded?: ScaffoldedMC;
 };
 
 export type Beat = {
@@ -83,6 +105,11 @@ export type Beat = {
   readonly manipulative?: ManipulativeConfig;
   readonly mc?: MCConfig;
   readonly reflectionPrompt?: string;
+  /** Short in-world line the tutor speaks when this beat is unlocked
+   *  via an advance from the previous beat. Spliced *before* `prose` in
+   *  the voice queue. May contain `{name}` slot. Omit for beat 0 (the
+   *  intro covers it). */
+  readonly enterLine?: string;
 };
 
 export type Lesson = {

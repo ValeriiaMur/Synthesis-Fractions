@@ -11,10 +11,20 @@ Forward-looking roadmap (Phase 1 → Phase 2 → Phase 3, what gets built when):
 A six-beat fraction-equivalence lesson (½ = ²⁄₄) for a 7–10 year old on an
 iPad, framed as a cosmos delivery story ("the Spirit run"), plus a
 "How It Works" one-pager that walks adult viewers through the eight
-Montessori principles behind it. Beat prose is fully scripted — the LLM
-(Haiku 4.5) sits behind a LangGraph state graph and shapes every chat reply,
-every wrong-answer hint, every reflection reaction, and — when the same MC
-is missed three times — a scaffolded simpler version of the question.
+Montessori principles behind it.
+
+**Fully scripted, no LLM.** Per the 1-week challenge brief, the tutor's
+dialogue is scripted with simple branching logic — no LLM-based agent.
+Every line the tutor speaks lives in [`lessonData.ts`](src/lib/lesson/lessonData.ts):
+beat prose, MC questions, per-wrong-option hints, escalating canonical
+hints, scaffolded 2-option variants for stuck cells, in-world transition
+lines, and celebration replies. Branching (yes/no on MC correctness,
+which hint to play, when to scaffold, where to advance) is a pure module
+[`branching.ts`](src/lib/lesson/branching.ts) — fully unit-tested, no
+network, no async. ElevenLabs TTS narrates the authored lines so Ari
+sounds warm without being stochastic. The earlier LangGraph + LLM agent
+layer (the StateGraph + 4 task clients + 5 API routes + the streaming
+chat rail) was deleted in full — the active lesson never depended on it.
 
 Two UI routes, one visual system (cosmos / space palette in
 [globals.css](src/app/globals.css)):
@@ -23,19 +33,21 @@ Two UI routes, one visual system (cosmos / space palette in
 - **`/lesson` — `LessonPage`** — six-beat lesson; full-width notebook
   (chocolate ration → moon-pizza → star-map → warp-drive Block Studio).
   Goes through a `NamePrompt` first so the student's name is captured
-  before the lesson starts. There is no chat rail — Ari is voice-only.
-  The chocked-up `ChatRail` / `ChatMessage` / `QuickReply` / `TypingDots`
-  files are still on disk as dead code in case the rail is ever
-  re-introduced, but nothing imports them anymore.
+  before the lesson starts. There is no chat rail — **each cell IS one
+  turn of a vertical chat**: `<Prose>` (Ari speaks) → manipulative / MC
+  (student responds) → `<StudentEcho>` (right-aligned mirror of the
+  response) → `<HintBubble>` / `<CelebrationBubble>` (Ari reacts) → next
+  cell unlocks. This satisfies the brief's "chat-style interface"
+  requirement using the notebook layout rather than a side rail.
   The 6th beat (`fraction_box_explore`) ships as **Block Studio** — a
   guided 1-2-3 multi-rail puzzle; the older single-row `FractionBox`
   manipulative is still on disk but no longer wired into any beat.
 
-**Canonical-first contract.** Every authored line — beat prose, MC
-question, canonical hints — renders immediately. The LLM fires in the
-background and *swaps* the displayed text only when it resolves under
-budget. If the network or the model fails, the canonical copy stays put
-and the lesson is fully playable.
+**Branching contract.** Every tutor decision (which hint, when to
+scaffold, which transition line, which celebration) is a pure call into
+`branching.ts`. No async, no network, no race conditions. State lives in
+React (`LessonPage`) and on disk (`lessonPersistence.ts`); branching.ts
+is the rulebook applied to that state.
 
 ## Stack
 
@@ -49,27 +61,21 @@ and the lesson is fully playable.
 - **Turbopack** for `next dev`.
 - **ESLint 9** flat config + `eslint-config-next`.
 - **Vitest 4** + **React Testing Library 16** + **jsdom 29**.
-- **`@langchain/langgraph`** + **`@langchain/anthropic`** — `lessonAgent` is
-  a single StateGraph with five nodes (one per task). Streaming chat
-  bypasses the graph and pipes `ChatAnthropic.stream()` straight into SSE.
-- **`langsmith`** — tracing is automatic when `LANGSMITH_TRACING=true` and
-  `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` are set (LangChain reads them at
-  module load). Required env vars listed below.
+- **No LLM in the active path.** The scripted-tutor approach means the
+  lesson runs end-to-end with only ElevenLabs (TTS) hitting the network.
+  `@langchain/*` and `langsmith` are still in `package.json` from the
+  retired agent layer; nothing imports them now, so they're safe to drop
+  in a future dependency cleanup.
 
 ## Required env vars
 
 | Var                    | Required? | Used for                                                  |
 | ---------------------- | --------- | --------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`    | yes       | All LLM calls (hint, classify, scaffold, advance, chat). |
-| `ELEVENLABS_API_KEY`   | optional  | Server-side TTS at `/api/tts`. Also used (offline, one-off) to generate `public/audio/ambient.mp3` for the home page pad. Without it the lesson plays silent. |
-| `LANGSMITH_TRACING`    | optional  | Set `true` to send traces.                                |
-| `LANGSMITH_API_KEY`    | optional  | LangSmith credentials.                                    |
-| `LANGSMITH_PROJECT`    | optional  | LangSmith project name.                                   |
+| `ELEVENLABS_API_KEY`   | optional  | Server-side TTS at `/api/tts`. Also used (offline, one-off) to generate `public/audio/ambient.mp3` for the home page pad. Without it the lesson plays silent — all tutor text is still on screen. |
 
-When `ANTHROPIC_API_KEY` is absent the routes return 500 and the lesson
-falls back to canonical authored copy. When `ELEVENLABS_API_KEY` is absent
-`/api/tts` returns 500 and the voice player silently no-ops; the lesson
-stays fully playable. The lesson stays fully playable.
+When `ELEVENLABS_API_KEY` is absent `/api/tts` returns 500 and the voice
+player silently no-ops; the lesson stays fully playable as a silent
+read-along.
 
 ## Module layout
 
@@ -79,12 +85,6 @@ src/
     page.tsx                 # renders <HowItWorksPage />
     lesson/page.tsx          # NamePrompt → LessonPage
     layout.tsx, globals.css
-    api/agent/
-      hint/route.ts                    # POST — blocking hint
-      classify-reflection/route.ts     # POST — blocking
-      scaffold-mc/route.ts             # POST — blocking, returns 2-option MC
-      advance/route.ts                 # POST — blocking, in-world advance line
-      chat/route.ts                    # POST — SSE token stream
     api/tts/route.ts                   # POST — text → audio/mpeg via ElevenLabs
   components/
     space/                   # Stars, GridBg, Doodles (+ 9 doodle icons)
@@ -97,122 +97,109 @@ src/
         BlockStudioStepIntro.tsx, BlockStudioCelebration.tsx,
         BlockStudioToast.tsx, blockStudioLogic.ts (+ test), types.ts
       LegoBrick, PaletteBrick, DragGhostBrick, StudRow, Plate, FracInline
-      Caption, Fraction, FoldChip, shade
+      Caption, Fraction, shade
     lesson/
-      LessonPage.tsx         # state machine + agent orchestration
+      LessonPage.tsx         # state machine + branching wiring
       NamePrompt.tsx         # student-name capture, persists to localStorage
-      Cell, Prose, MCBlock
+      Cell, Prose, MCBlock, StudentEcho
       HintBubble, CelebrationBubble
-      Intro, Outro
-      TopBar, JumpButton
-      ChatRail, ChatMessage, QuickReply, TypingDots
-      Icon* (Pause, Sound, Send, ArrowDown, ArrowLeft)
+      Intro, Outro, ResumePrompt
+      TopBar
+      Icon* (Sound, ArrowLeft)
     onepager/
       HowItWorksPage, Hero, HeroPreview
-      PrincipleRow, SideRail, ScrollProgress, FinalCTA
+      PrincipleRow, SideRail, ScrollProgress, ScrollDownInvite, ScrollTopButton
+      AmbientAudio, AmbientGlow, Unveil, FinalCTA
       demos/ (DemoFrame, OrderToggle, TrayItem, FauxCell + 8 Demo* files)
   lib/
     lesson/
       types.ts               # Beat, MCConfig, ManipulativeConfig (incl. FractionBox), LessonState
       lessonData.ts          # 6 beats with story-fied prose + highlight tokens
+      branching.ts           # pure rulebook — reactToMC / shouldScaffold / advance
       validators.ts          # validateMC / validateManipulative (all 4 kinds)
-      stripMarkup.ts, completes.ts, fractions.ts
-      aiReplyTo.ts           # deterministic chat fallback
+      lessonPersistence.ts   # localStorage snapshot + isManipulativeState guard
+      stripMarkup.ts, completes.ts, fractions.ts, titleCaseName.ts
+      manipSummary.ts        # short label for each manipulative state
       useReveal.ts, useScrollProgress.ts
-    agent/
-      lessonAgent.ts         # StateGraph: hint | classify_reflection | scaffold_mc | advance_to_beat | chat
-      generateHint.ts        # back-compat wrapper around runLessonAgent({task:'hint'})
-      anthropicClient.ts     # getHintLLM() + getStreamingLLM()
-      validation.ts          # shared whitelists + isKnownBeatId / isKnownKind
-      hintClient.ts, classifyReflectionClient.ts
-      scaffoldMCClient.ts    # 3-wrong-answers swap
-      advanceClient.ts       # in-world advance acknowledgement
-      chatClient.ts          # async-generator over SSE tokens
+    audio/
+      ambientPlayer.ts       # home-page ambient pad singleton
     voice/
       elevenLabsClient.ts    # server-side ElevenLabs TTS wrapper (Rachel, eleven_flash_v2_5)
       ttsClient.ts           # client fetch + in-memory cache (text → Blob)
       voicePlayer.ts         # singleton queue + mute, factory + getVoicePlayer()
       playSample.ts          # one-off audio preview for the name-modal sound check
   hooks/
-    useParallaxDoodles.ts
+    useParallaxDoodles.ts, useElementProgress.ts,
+    useActivePrinciple.ts, useSlideDrift.ts
 ```
 
 Tests sit next to the component they cover (`*.test.tsx` / `*.test.ts`).
 Vitest picks up `src/**/*.{test,spec}.{ts,tsx}` per
 [`vitest.config.mts`](vitest.config.mts).
 
-## The lesson agent graph
+## Branching ([`branching.ts`](src/lib/lesson/branching.ts))
+
+The scripted tutor's "intelligence" is one pure module + one data table.
+No graph, no agent, no async, no race conditions.
 
 ```
-                              ┌─────────┐
-                              │  START  │
-                              └────┬────┘
-                                   │ conditional edge on state.input.task
-       ┌──────────┬────────────────┼──────────────────┬──────┐
-       ▼          ▼                ▼                  ▼      ▼
-    ┌──────┐ ┌────────────────┐ ┌────────────┐ ┌──────────────┐ ┌──────┐
-    │ hint │ │ classify_      │ │ scaffold_mc│ │ advance_     │ │ chat │
-    │      │ │  reflection    │ │            │ │  to_beat     │ │      │
-    └──┬───┘ └──────┬─────────┘ └──────┬─────┘ └──────┬───────┘ └──┬───┘
-       └────────────┴─────────────────┴──────────────┴────────────┘
-                                  ▼
-                                ┌───┐
-                                │END│
-                                └───┘
+              ┌─────────────────────────────────────┐
+              │ kid clicks an MC option / completes │
+              │ a manipulative                       │
+              └─────────────────┬───────────────────┘
+                                │
+                                ▼
+                      reactToMC(beat, optionId,
+                                prevAttempts, name)
+                                │
+                ┌───────────────┴────────────────┐
+                ▼                                ▼
+        kind: 'correct'                    kind: 'wrong'
+        line: correctReply                 line: per-option hint
+        nextBeatId                              ?? attempt-indexed
+        transitionLine                          canonical
+                                           shouldScaffold
 ```
 
-Beat prose is fully scripted and never rewritten — the LLM-driven
-paraphrase node was removed (the canonical-first contract collapses to
-just "always show the scripted text").
+| Decision                  | Source of truth                                |
+| ------------------------- | ---------------------------------------------- |
+| What does Ari say on right? | `beat.mc.correctReply` (authored)              |
+| Which beat is next?       | `lesson.beats[idx + 1]?.id`                    |
+| In-world transition line? | `nextBeat.enterLine`, name-interpolated        |
+| What does Ari say on wrong? | `mc.hintByWrongOption[optionId]` if authored, otherwise `mc.canonicalHints[attempt]` (clamped at last entry) |
+| When to scaffold?         | `prevAttempts + 1 >= SCAFFOLD_THRESHOLD (3)` AND `mc.scaffolded` is authored |
+| Which scaffold to swap?   | `beat.mc.scaffolded` (authored 2-option variant) |
 
-| Node                  | Input payload         | Output                                    |
-| --------------------- | --------------------- | ----------------------------------------- |
-| `hint`                | manip kind, question, correct + selected labels, attempt | one short observational hint |
-| `classify_reflection` | beat id, manip kind, reflection text  | `{ category, reaction }` JSON     |
-| `scaffold_mc`         | beat id, manip kind, question, options, correctOptionId | `{ paraphrasedQuestion, keepOptionId }` JSON; route returns `{ paraphrasedQuestion, reducedOptions: [correct, distractor] }` |
-| `advance_to_beat`     | from/to beat ids, kind label, student name | one in-world acknowledgement line |
-| `chat` (blocking fallback) | full chat context  | one observational reply              |
+`{name}` slots in `correctReply` / `enterLine` are interpolated via
+`interpolate(template, { name })`. The whole module is 17 tests
+([branching.test.ts](src/lib/lesson/branching.test.ts)) — no mocking,
+no async, no setup.
 
-Every node passes its model output through `isPraiseBombing(text)`. If a
-praise phrase slips through ("great job", "awesome", "perfect", "you got
-this", etc.) the node throws and the route returns 500 → client falls back
-to canonical copy.
+### Retired layers
 
-`scaffold_mc` has an extra contract: the node throws if the model picks the
-correct option id as the distractor, or picks an id not in the original
-options. The client *also* re-checks that the correct option survived the
-reduction before accepting the swap.
+Two earlier surfaces were removed entirely once it was clear nothing in
+the active lesson depended on them:
 
-## Streaming chat — SSE protocol (currently dormant)
+- **LangGraph + LLM agent** — `src/lib/agent/` (StateGraph + 4 task
+  clients + prompts) and `src/app/api/agent/` (5 API routes: hint,
+  classify-reflection, scaffold-mc, advance, SSE chat stream). Deleted.
+- **Chat rail UI** — `ChatRail`, `ChatMessage`, `QuickReply`,
+  `TypingDots`, `JumpButton`, plus the `IconArrowDown` / `IconPause` /
+  `IconSend` icons that only those components used. Also
+  `aiReplyTo.ts` (the deterministic chat-fallback the rail consumed).
+  Deleted.
 
-The chat rail was retired, so nothing in the running app calls this any
-more — but the endpoint + client are still wired and tested in case the
-free-text Ari channel is ever brought back.
+The lesson now drives Ari through voice + inline cell bubbles only —
+there is no streaming chat surface to maintain.
 
-The chat path bypasses the graph and pipes `ChatAnthropic.stream()` directly
-into a `ReadableStream` from `POST /api/agent/chat`. The prompt comes from
-`buildChatMessages(payload)` in `lessonAgent.ts` (one source of truth).
-
-```
-POST /api/agent/chat
-  ↓
-text/event-stream
-  ↓
-data: <token>
-data: <token>
-...
-data: [DONE]
-```
-
-Multi-line tokens use one `data: ` line per content line, joined back on
-the client (matches the SSE spec). Praise words detected mid-stream cause
-an immediate `[DONE]` and the client falls back to canonical copy.
-
-Client side, `streamChat()` is an `async function*` that fetches the
-endpoint, walks `Response.body.getReader()` parsing `data: ` events, and
-yields each token until `[DONE]` or stream close. It never throws — an
-iterator that yields zero tokens is the "no LLM reply, use fallback"
-signal.
+The `FractionBox` manipulative is still on disk: `LessonPage` keeps a
+fallback render branch for `kind: 'fractionbox'` configs and the
+`FractionBoxConfig` / `FractionBoxState` types remain in
+`ManipulativeConfig` / `ManipulativeState` unions, but no beat in
+`lessonData.ts` uses `kind: 'fractionbox'`. Deleting it would mean
+trimming those unions + the `lessonPersistence.ts` validator + the
+LessonPage branch; kept as-is because `FractionBoxBar` is the brick type
+BlockStudio is built on, so a clean rename is a separate change.
 
 ## Voice (ElevenLabs TTS)
 
@@ -257,8 +244,7 @@ Design contract:
 - **No `_cached`-style 304 dance.** The route sets
   `Cache-Control: private, max-age=86400` so the browser keeps audio across
   navigations; the in-memory map covers same-page repeats.
-- **LangChain is not involved.** The voice subsystem is independent of
-  Anthropic / the lesson agent. ElevenLabs failures degrade silently:
+- **No LLM in the voice path.** ElevenLabs failures degrade silently:
   `speak()` swallows fetch + play errors and moves on to the next line.
 - **Reveal-gated `speakAri`.** Every call goes through a double
   `requestAnimationFrame` before reaching `voice.speak`. React commits +
@@ -269,14 +255,16 @@ Design contract:
   1. **Mount.** `voice.stop()` clears any leftover queue and then the
      active beat's prose is queued. Re-entering the route (Home → Lesson)
      always starts on whichever cell the kid is currently on.
-  2. **Wrong MC.** The canonical hint (or the swapped-in LLM hint) is
-     queued. No advance — the kid stays on the cell.
+  2. **Wrong MC.** The branching-resolved hint (per-option override or
+     attempt-indexed canonical) is queued. No advance — the kid stays on
+     the cell.
   3. **Correct MC.** The celebration line is queued; 600ms later
      `advanceTo` fires.
-  4. **`advanceTo`.** Races `fetchAdvanceLine`; on success queues
-     `speakAri(line)` *then* `speakAri(prose)`; on failure queues just the
-     prose. Visual order in the notebook (the unlock banner sits above the
-     newly-active cell) matches audio order.
+  4. **`advanceTo`.** Reads `enterLineFor(nextBeat, name)` from the
+     authored data; if present, queues `speakAri(enterLine)` *then*
+     `speakAri(prose)`; otherwise queues just the prose. Visual order in
+     the notebook (the unlock banner sits above the newly-active cell)
+     matches audio order.
 - **Silent during exercise.** While the kid is tinkering with a
   manipulative or pondering an MC, there is no `speakAri` call. The
   player drains whatever was already queued (typically the prose) and
@@ -327,6 +315,54 @@ one doesn't affect the other.
   lesson so the visual language matches the lesson's mute button. State
   binds via `useSyncExternalStore(player.subscribe, player.isMuted)`.
 
+## Unveil — home-page intro (once per session)
+
+`HowItWorksPage` mounts an `<Unveil />` sibling before its `.page` div.
+The component renders a fixed-position cream overlay with a dark-navy
+square that grows from center to fill the viewport (~1.7s), then
+unmounts at t=1.9s. The square's color matches `--bg-0`, so the moment
+it covers the viewport it visually *becomes* the page underneath; the
+cream backdrop fades out under cover, the page itself fades in via the
+`.page-reveal` sibling rule, and the visitor lands directly on the dark
+cosmos scene.
+
+- **Once per browser session.** `Unveil` reads `sessionStorage` key
+  `synthesis:unveil-played` via `useSyncExternalStore` with `false` as
+  the server snapshot. SSR therefore always emits the overlay markup so
+  the `.unveil ~ .page-reveal` rule hides the page at first paint (no
+  FOUC). On a repeat visit the client snapshot reads `true` and React
+  reconciles to `null` right after hydration — one frame of fully styled
+  overlay, then it's gone. The earlier `useState(() => hasUnveilPlayed())`
+  initializer caused an SSR/CSR mismatch where the server-rendered DOM
+  briefly appeared as raw text in the corner before React tore it down;
+  `useSyncExternalStore` is React's canonical fix and also satisfies
+  `react-hooks/set-state-in-effect`.
+- **Stamp on completion, not on mount.** The flag is written **when the
+  1.9s timer fires**, not at mount. Stamping at mount looked simpler but
+  broke React Strict Mode (Next.js default in dev): strict mode unmounts
+  → remounts every component on the first cycle, so the second mount
+  would see the flag and short-circuit, and the visitor would never see
+  the animation. Stamping on completion means the cleanup of the first
+  (cancelled) mount clears the timer before it can stamp; only the
+  surviving mount runs the timer to the end and writes the flag.
+  Side-benefit: a navigation away mid-animation also leaves the flag
+  unset, so the visitor gets the full intro next time. The gate uses
+  **session** (not local) storage so a new tab gets the unveil again —
+  it's a brand moment, not a permanent onboarding step.
+- **CSS scoping via sibling combinator.** All page-reveal styles in
+  `globals.css` are scoped to `.unveil ~ .page-reveal`. When Unveil
+  returns `null` the selector misses and the page is fully visible from
+  frame one, with no JS coordination between the two components. On
+  first visit the selector matches, the page starts at opacity 0, and
+  the `unveilPageReveal` keyframe fades it in starting at 1.5s.
+- **A11y + perf.** `aria-hidden="true"` on the overlay (the brand mark
+  "synthesis tutor" is decorative — it duplicates the page's own
+  heading), `pointer-events: none` so scroll/clicks pass through during
+  the 1.9s window, and `prefers-reduced-motion: reduce` hides the
+  overlay and skips the page fade entirely. The square animates only
+  `transform` and `opacity` — compositor-only, no layout or paint per
+  frame.
+
 ## Lesson state machine (`LessonPage`)
 
 ```ts
@@ -337,31 +373,31 @@ mcStatus: Partial<Record<BeatId, 'idle'|'wrong'|'correct'>>;
 hintAttempts: Partial<Record<BeatId, number>>;
 manipStates: Partial<Record<BeatId, ManipulativeState>>;
 
-// LLM-driven overrides — canonical-first, swap on resolve
-liveHints: Partial<Record<BeatId, string>>;        // swaps canonical hint
-scaffoldedMC: Partial<Record<BeatId, MCConfig>>;   // overrides beat.mc
+// Branching-driven cell overrides (filled by branching.ts, not LLM)
+liveHints: Partial<Record<BeatId, string>>;        // hint shown in the bubble
+scaffoldedMC: Partial<Record<BeatId, MCConfig>>;   // 2-option swap after 3 wrongs
 
 // View / voice cues
 unlockedBanners: ReadonlySet<BeatId>;              // session-only
 ```
 
-**On wrong MC:** flip status to `wrong` immediately and queue the canonical
-hint for voice. In the background fire `fetchHint(...)` — if it resolves
-under budget AND its per-beat request id is still the latest, swap
-`liveHints[beat.id]` so the bubble re-renders with the LLM hint.
+**On wrong MC:** call `reactToMC(beat, optionId, prevAttempts, name)`.
+The returned `line` (per-option hint if authored, else attempt-indexed
+canonical) is stored in `liveHints[beat.id]` and spoken via `speakAri`.
+`hintAttempts[beat.id]` increments. If `reaction.shouldScaffold === true`
+AND `beat.mc.scaffolded` is authored, swap `scaffoldedMC[beat.id]` to the
+2-option variant and clear the kid's selection so they can pick fresh.
 
-**On the 3rd wrong on the same beat:** also fire `fetchScaffoldedMC`. On
-success, store the new 2-option MC in `scaffoldedMC[beat.id]`, clear the
-learner's last selection / status / live hint so they can pick fresh, and
-the cell rebuilds the MC with the shorter question + two options.
-
-**On correct MC:** flip status to `correct`, queue the celebration line
-for voice, add the beat to `doneSet`. 600ms later `advanceTo` runs.
+**On correct MC:** call `reactToMC(...)`. The returned `line` is the
+authored `correctReply` (name-interpolated). Speak it. Mark the beat
+done. If `reaction.nextBeatId` is non-null, fire `advanceTo(next)` on a
+600ms timeout; otherwise (final beat) speak the closing line on a 500ms
+timeout.
 
 **On advance:** flip `activeIdx`, add the next beat to `unlockedBanners`,
-race `fetchAdvanceLine`, then queue voice in visual order: `[advanceLine,
-nextProse]` (or just `[nextProse]` if no line). Scroll the new cell into
-view 250ms after the flip. The prose itself is scripted and never swapped.
+read `enterLineFor(nextBeat, name)` and speak it (if any), then speak the
+prose. Scroll the new cell into view 250ms after the flip. All
+synchronous — no fetch, no race.
 
 **Block Studio (the 6th beat).** `fraction_box_explore` carries a
 `manipulative: { kind: 'blockstudio', palette, steps, quests }` config; the
@@ -447,27 +483,18 @@ identity doesn't re-fire the publish effect.
 
 ## Why these choices
 
-- **One graph + a streaming side-channel.** LangGraph is great for routed
-  blocking turns (router + post-filter + per-node discipline) and not great
-  at token-by-token streaming. The graph handles 5 tasks; chat streams
-  directly through `ChatAnthropic.stream()` using the same prompt builder.
-  One source of truth for the chat system message, no graph overhead per
-  token.
-- **Canonical-first everywhere.** Authored prose / hints / questions render
-  first. LLM responses *swap* into place. The lesson is fully playable with
-  zero LLM availability.
-- **Per-beat request ids.** A learner can answer the same MC wrong four
-  times in 5 seconds; only the last LLM hint should win. Each LLM-swap site
-  uses a `useRef<Partial<Record<BeatId, number>>>` to drop stale responses.
-- **Tests for logic, not pixels.** Every pure helper + every agent node
-  has unit tests. Manipulatives test their state machines. Visual-only
-  components (Doodles, Hero, the demo set) skip tests this pass.
-- **`useMemo` for cellRefs, not `useRef`.** Reading `useRef.current` during
-  render trips `react-hooks/refs`. A memoized array of refs is render-safe
-  and JumpButton still gets the per-cell handles.
+- **Scripted, not generated.** Every line Ari can say lives in
+  `lessonData.ts`; every decision lives in `branching.ts`. Removes the
+  whole class of LLM failure modes (latency, hallucination, racing
+  responses) and lets the lesson run end-to-end with only ElevenLabs in
+  the network path.
+- **Tests for logic, not pixels.** Every pure helper + every branching
+  rule has unit tests. Manipulatives test their state machines.
+  Visual-only components (Doodles, Hero, the demo set) skip tests this
+  pass.
 - **Stable-ref onChange in every manipulative.** Parents pass a fresh
-  inline arrow each render; without the ref the publish effect would re-fire
-  every render and spin an infinite loop.
+  inline arrow each render; without the ref the publish effect would
+  re-fire every render and spin an infinite loop.
 
 ## Responsive design (iPad-first)
 
@@ -499,20 +526,9 @@ declarations vary by media query.
   type doesn't crash into edges.
 - **`720px`** — phones. Further padding shrink, smaller hero h1.
 
-**Orientation-driven lesson stage.** The lesson's chat-on-the-left /
-notebook-on-the-right grid is keyed off `min-aspect-ratio: 1/1`, not a
-width breakpoint, because what matters is whether there's room for two
-columns next to each other:
-
-- Portrait (`max-aspect-ratio: 1/1`) → stage stacks: chat on top
-  (`max-height: 38vh`), notebook below. Cell gutter narrows from 80→60px
-  and the floating JumpButton gets 140px of bottom clearance from the
-  notebook so it doesn't sit on top of the last cell.
-- Landscape, `≤ 1280px` (iPad mini landscape, iPad Pro 11" landscape) →
-  side-by-side, but the chat column drops from 400→340px so the notebook
-  isn't squeezed.
-- Landscape, `≤ 1024px` → chat column drops to 300px and chat
-  internal padding tightens.
+**Orientation-driven lesson stage.** The lesson is a single full-width
+notebook column (the chat rail was retired). Cell gutter narrows from
+80→60px on portrait so the manipulatives breathe on iPad mini portrait.
 
 **TopBar.** The verbose "equivalent fractions · ½ = ²⁄₄" tag shrinks
 letter-spacing at ≤ 900px and is hidden outright at ≤ 560px so the

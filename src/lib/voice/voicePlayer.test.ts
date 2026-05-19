@@ -152,6 +152,41 @@ describe('voicePlayer', () => {
     expect(play.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
+  it('stop() aborts the in-flight play so the audio cuts mid-line', async () => {
+    // Real-world: kid is on lesson, Ari is mid-sentence, kid clicks back to
+    // home. The audio should cut. Voice is page-bound: leaving the lesson
+    // calls voice.stop(), which now also aborts the current play().
+    const { deps } = makeDeps();
+    let abortedDuringPlay = false;
+    deps.play = vi.fn(
+      async (_blob: Blob, opts?: { signal?: AbortSignal }) => {
+        await new Promise<void>((resolve) => {
+          if (opts?.signal?.aborted) {
+            abortedDuringPlay = true;
+            resolve();
+            return;
+          }
+          opts?.signal?.addEventListener('abort', () => {
+            abortedDuringPlay = true;
+            resolve();
+          });
+          // Otherwise stay pending until aborted (simulates a long line).
+        });
+      },
+    );
+    const player = createVoicePlayer(deps);
+
+    player.speak('a long sentence');
+    // Let drain pick it up and call deps.play.
+    await new Promise<void>((r) => setTimeout(r, 5));
+
+    player.stop();
+    // Give the abort event a tick to propagate.
+    await new Promise<void>((r) => setTimeout(r, 5));
+
+    expect(abortedDuringPlay).toBe(true);
+  });
+
   it('swallows fetch errors and continues with the next utterance', async () => {
     const { deps, play } = makeDeps();
     deps.fetchAudio = vi

@@ -15,6 +15,12 @@ export type AmbientPlayer = {
    *  first user-gesture retry to satisfy browser autoplay policies. No-op
    *  when muted; rejection (autoplay blocked) is swallowed. */
   readonly start: () => Promise<void>;
+  /** Soft-pause the ambient audio without flipping the user's mute
+   *  preference. Used when the host component unmounts (e.g. navigating
+   *  away from the home page) so the loop doesn't bleed into other
+   *  pages. Returning to the page calls `start()` which resumes playback
+   *  if the user hasn't muted in the meantime. */
+  readonly pause: () => void;
   readonly setMuted: (muted: boolean) => Promise<void>;
   readonly isMuted: () => boolean;
   readonly subscribe: (listener: (muted: boolean) => void) => () => void;
@@ -23,6 +29,9 @@ export type AmbientPlayer = {
 export type AmbientPlayerDeps = {
   readonly audio: {
     readonly play: () => Promise<void>;
+    /** Pauses the audio element without touching the `muted` property —
+     *  the soft-pause used by `pause()`. */
+    readonly pause: () => void;
     /** Sets the audio element's `muted` property. Race-free silence even
      *  when an in-flight `play()` Promise hasn't resolved yet. */
     readonly setMuted: (muted: boolean) => void;
@@ -69,6 +78,12 @@ export function createAmbientPlayer(deps: AmbientPlayerDeps): AmbientPlayer {
     }
   };
 
+  const pause = (): void => {
+    // Soft pause. Does not touch `muted` so the user's "wants sound"
+    // preference (and the icon state) stays where it was.
+    deps.audio.pause();
+  };
+
   const isMuted = (): boolean => muted;
 
   const subscribe = (listener: (muted: boolean) => void): (() => void) => {
@@ -78,7 +93,7 @@ export function createAmbientPlayer(deps: AmbientPlayerDeps): AmbientPlayer {
     };
   };
 
-  return { start, setMuted, isMuted, subscribe };
+  return { start, pause, setMuted, isMuted, subscribe };
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +141,11 @@ export function getAmbientPlayer(): AmbientPlayer {
   if (typeof window === 'undefined') {
     // SSR fallback — never plays, just reflects "muted".
     _default = createAmbientPlayer({
-      audio: { play: () => Promise.resolve(), setMuted: () => {} },
+      audio: {
+        play: () => Promise.resolve(),
+        pause: () => {},
+        setMuted: () => {},
+      },
       storage: defaultStorage(),
     });
     return _default;
@@ -147,6 +166,7 @@ export function getAmbientPlayer(): AmbientPlayer {
   _default = createAmbientPlayer({
     audio: {
       play: () => el!.play(),
+      pause: () => el!.pause(),
       setMuted: (m) => {
         el!.muted = m;
         if (m) el!.pause();

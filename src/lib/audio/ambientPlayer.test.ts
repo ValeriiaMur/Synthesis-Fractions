@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createAmbientPlayer,
   type AmbientPlayerDeps,
@@ -7,15 +7,17 @@ import {
 function makeDeps(overrides: Partial<AmbientPlayerDeps> = {}): {
   readonly deps: AmbientPlayerDeps;
   readonly play: ReturnType<typeof vi.fn>;
+  readonly pauseAudio: ReturnType<typeof vi.fn>;
   readonly setAudioMuted: ReturnType<typeof vi.fn>;
   readonly storage: { value: boolean };
 } {
   const storage = { value: false };
   const play = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+  const pauseAudio = vi.fn<() => void>();
   const setAudioMuted = vi.fn<(muted: boolean) => void>();
 
   const deps: AmbientPlayerDeps = {
-    audio: { play, setMuted: setAudioMuted },
+    audio: { play, pause: pauseAudio, setMuted: setAudioMuted },
     storage: {
       get: () => storage.value,
       set: (v) => {
@@ -25,7 +27,7 @@ function makeDeps(overrides: Partial<AmbientPlayerDeps> = {}): {
     ...overrides,
   };
 
-  return { deps, play, setAudioMuted, storage };
+  return { deps, play, pauseAudio, setAudioMuted, storage };
 }
 
 describe('ambientPlayer', () => {
@@ -115,6 +117,28 @@ describe('ambientPlayer', () => {
     play.mockRejectedValueOnce(new Error('autoplay blocked'));
     const player = createAmbientPlayer(deps);
     await expect(player.start()).resolves.toBeUndefined();
+  });
+
+  it('pause() pauses the audio without changing the mute preference', () => {
+    const { deps, pauseAudio, storage } = makeDeps();
+    const player = createAmbientPlayer(deps);
+
+    expect(player.isMuted()).toBe(false);
+    player.pause();
+
+    expect(pauseAudio).toHaveBeenCalledOnce();
+    // Soft pause — user's "wants sound" preference is unchanged.
+    expect(player.isMuted()).toBe(false);
+    expect(storage.value).toBe(false);
+  });
+
+  it('pause() does not notify mute subscribers', () => {
+    const { deps } = makeDeps();
+    const player = createAmbientPlayer(deps);
+    const listener = vi.fn();
+    player.subscribe(listener);
+    player.pause();
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it('notifies subscribers on mute changes only', async () => {

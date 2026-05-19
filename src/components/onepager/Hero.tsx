@@ -1,6 +1,6 @@
-import Link from 'next/link';
-import { HeroPreview } from './HeroPreview';
-import { ScrollDownInvite } from './ScrollDownInvite';
+import Link from "next/link";
+import { HeroPreview } from "./HeroPreview";
+import { ScrollDownInvite } from "./ScrollDownInvite";
 
 /**
  * Full-viewport hero — title, supporting copy, primary + secondary actions,
@@ -19,9 +19,10 @@ export function Hero() {
           </h1>
           <p>
             A short lesson on equivalent fractions, taught the Montessori way.
-            The child handles a chocolate bar, a pizza, and a piece of paper —
-            and sees <span style={{ color: 'var(--green)' }}>½</span> and{' '}
-            <span style={{ color: 'var(--green)' }}>²⁄₄</span> are the same
+            The child handles a chocolate bar, a pizza, building blocks, and a
+            piece of paper — and sees{" "}
+            <span style={{ color: "var(--green)" }}>½</span> and{" "}
+            <span style={{ color: "var(--green)" }}>²⁄₄</span> are the same
             amount, before anyone uses those words.
           </p>
           <div className="hero-actions">

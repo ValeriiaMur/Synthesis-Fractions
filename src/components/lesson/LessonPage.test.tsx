@@ -23,27 +23,6 @@ vi.mock('@/lib/voice/voicePlayer', () => ({
   }),
 }));
 
-const fetchAdvanceLineMock = vi.fn<
-  (...args: unknown[]) => Promise<string | null>
->();
-vi.mock('@/lib/agent/advanceClient', () => ({
-  fetchAdvanceLine: (...args: unknown[]) => fetchAdvanceLineMock(...args),
-}));
-
-const fetchHintMock = vi.fn<
-  (...args: unknown[]) => Promise<string | null>
->();
-vi.mock('@/lib/agent/hintClient', () => ({
-  fetchHint: (...args: unknown[]) => fetchHintMock(...args),
-}));
-
-const fetchScaffoldedMCMock = vi.fn<
-  (...args: unknown[]) => Promise<unknown | null>
->();
-vi.mock('@/lib/agent/scaffoldMCClient', () => ({
-  fetchScaffoldedMC: (...args: unknown[]) => fetchScaffoldedMCMock(...args),
-}));
-
 // jsdom doesn't implement scrollIntoView on HTMLElement.
 if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = function (): void {};
@@ -66,9 +45,6 @@ beforeEach(() => {
   setMutedMock.mockReset();
   isMutedMock.mockReset().mockReturnValue(false);
   subscribeMock.mockReset().mockImplementation(() => () => {});
-  fetchAdvanceLineMock.mockReset().mockResolvedValue(null);
-  fetchHintMock.mockReset().mockResolvedValue(null);
-  fetchScaffoldedMCMock.mockReset().mockResolvedValue(null);
 });
 
 function freshState(
@@ -111,6 +87,48 @@ describe('LessonPage — view-driven voice', () => {
     // the chat rail and shouldn't be spoken anymore.
     expect(spoken.some((s) => /co-pilot/i.test(s))).toBe(false);
     expect(spoken.some((s) => /short stops/i.test(s))).toBe(false);
+  });
+
+  it('speaks a Spirit intro before the first beat prose on a fresh mount', async () => {
+    await act(async () => {
+      render(<LessonPage lesson={lesson} studentName="Ben" />);
+    });
+    await act(async () => {
+      await flush(60);
+    });
+
+    const spoken = speakMock.mock.calls.map((c) => String(c[0]));
+    const introIdx = spoken.findIndex((s) => /spirit/i.test(s));
+    const proseIdx = spoken.findIndex((s) =>
+      /snack-ration|chocolate bar/i.test(s),
+    );
+
+    expect(introIdx).toBeGreaterThanOrEqual(0);
+    expect(introIdx).toBeLessThan(proseIdx);
+    // Intro should greet the student by name.
+    expect(spoken[introIdx]).toMatch(/Ben/);
+  });
+
+  it('does not speak the intro when restoring to a later beat', async () => {
+    const restored = freshState({
+      activeIdx: 1,
+      doneIds: ['chocolate_intro'],
+    });
+    await act(async () => {
+      render(
+        <LessonPage
+          lesson={lesson}
+          studentName="Ben"
+          initialState={restored}
+        />,
+      );
+    });
+    await act(async () => {
+      await flush(60);
+    });
+
+    const spoken = speakMock.mock.calls.map((c) => String(c[0]));
+    expect(spoken.some((s) => /spirit/i.test(s))).toBe(false);
   });
 
   it('speaks the restored beat prose on mount when initialState pins a later beat', async () => {
@@ -177,10 +195,9 @@ describe('LessonPage — view-driven voice', () => {
     expect(stopMock).toHaveBeenCalled();
   });
 
-  it('queues celebration → advance line → next prose on correct MC', async () => {
-    const ADVANCE = 'Locked in, Ben. Pizza incoming.';
-    fetchAdvanceLineMock.mockResolvedValue(ADVANCE);
-
+  it('queues celebration → enter line → next prose on correct MC', async () => {
+    // Authored content (no LLM mock) — the enter line for pizza_explore is
+    // "Locked in, {name}. Pizza touchdown coming up." after name interp.
     const initial = freshState({
       activeIdx: 1,
       doneIds: ['chocolate_intro'],
@@ -207,21 +224,25 @@ describe('LessonPage — view-driven voice', () => {
     });
 
     const spoken = speakMock.mock.calls.map((c) => String(c[0]));
-    const idxCelebration = spoken.findIndex((t) => /that's right/i.test(t));
-    const idxAdvance = spoken.indexOf(ADVANCE);
+    const idxCelebration = spoken.findIndex((t) =>
+      /two it is|half-tray fit perfectly/i.test(t),
+    );
+    const idxEnter = spoken.findIndex((t) =>
+      /locked in, ben.*pizza/i.test(t),
+    );
     const idxProse = spoken.findIndex((t) =>
       /moon-pizza|cook pulls a moon-pizza/i.test(t),
     );
 
     expect(idxCelebration).toBeGreaterThanOrEqual(0);
-    expect(idxAdvance).toBeGreaterThanOrEqual(0);
+    expect(idxEnter).toBeGreaterThanOrEqual(0);
     expect(idxProse).toBeGreaterThanOrEqual(0);
-    // Full audio order: celebration → advance line → next prose.
-    expect(idxCelebration).toBeLessThan(idxAdvance);
-    expect(idxAdvance).toBeLessThan(idxProse);
+    // Full audio order: celebration → enter line → next prose.
+    expect(idxCelebration).toBeLessThan(idxEnter);
+    expect(idxEnter).toBeLessThan(idxProse);
   });
 
-  it('speaks the canonical hint on a wrong MC answer', async () => {
+  it('speaks the per-wrong-option hint when authored, falling back to canonical', async () => {
     const initial = freshState({
       activeIdx: 1,
       doneIds: ['chocolate_intro'],
@@ -234,7 +255,7 @@ describe('LessonPage — view-driven voice', () => {
       await flush(20);
     });
 
-    // Pick the wrong answer "Four" instead of "Two".
+    // "Four" has an authored per-option hint mentioning the whole bar.
     const fourBtn = screen
       .getAllByRole('button')
       .find((b) => /Four$/.test(b.textContent ?? ''));
@@ -249,9 +270,9 @@ describe('LessonPage — view-driven voice', () => {
     });
 
     const spoken = speakMock.mock.calls.map((c) => String(c[0]));
-    // The first canonical hint for chocolate_check mentions sliding the
-    // quarter-squares side-by-side. Match a robust substring.
-    expect(spoken.some((s) => /quarter-squares/i.test(s))).toBe(true);
+    expect(
+      spoken.some((s) => /whole bar|tray only holds the half/i.test(s)),
+    ).toBe(true);
   });
 
   it('does not speak anything while the kid is working an exercise', async () => {
@@ -274,5 +295,70 @@ describe('LessonPage — view-driven voice', () => {
       await flush(200);
     });
     expect(speakMock.mock.calls.length).toBe(baseline);
+  });
+
+  it('writes the latest activeIdx to localStorage synchronously (no rAF gap)', async () => {
+    // Regression: persistence used to fire inside requestAnimationFrame, so
+    // closing the tab in the ~16ms between a state commit and the rAF
+    // callback would lose the most recent advance. With synchronous writes
+    // the saved state is current the moment any effect runs.
+    const initial = freshState({
+      activeIdx: 2,
+      doneIds: ['chocolate_intro', 'chocolate_check'],
+    });
+    await act(async () => {
+      render(
+        <LessonPage
+          lesson={lesson}
+          studentName="Ben"
+          initialState={initial}
+        />,
+      );
+    });
+    // No flush, no rAF — the persistence effect runs after commit and
+    // writes immediately. The setTimeout(0) tick gives React's effect
+    // phase a chance to fire but does NOT wait on a frame.
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    });
+
+    const raw = window.localStorage.getItem(
+      'synthesis:lesson:fraction-equivalence-v1:state',
+    );
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!) as { activeIdx: number };
+    expect(parsed.activeIdx).toBe(2);
+  });
+
+  it('flushes the snapshot on beforeunload as a backstop', async () => {
+    // Tab close fires beforeunload synchronously. We listen for it and
+    // write the freshest in-memory snapshot before the page tears down,
+    // so even mid-render close-events don't drop state.
+    const initial = freshState({
+      activeIdx: 3,
+      doneIds: ['chocolate_intro', 'chocolate_check', 'pizza_explore'],
+    });
+    await act(async () => {
+      render(
+        <LessonPage
+          lesson={lesson}
+          studentName="Ben"
+          initialState={initial}
+        />,
+      );
+    });
+    // Clear what the mount-time persist wrote so we can prove the
+    // beforeunload listener writes independently.
+    window.localStorage.removeItem(
+      'synthesis:lesson:fraction-equivalence-v1:state',
+    );
+    window.dispatchEvent(new Event('beforeunload'));
+
+    const raw = window.localStorage.getItem(
+      'synthesis:lesson:fraction-equivalence-v1:state',
+    );
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!) as { activeIdx: number };
+    expect(parsed.activeIdx).toBe(3);
   });
 });

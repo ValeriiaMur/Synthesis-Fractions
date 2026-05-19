@@ -3,7 +3,7 @@
 _Complete this before writing code. Save your AI conversation as a reference document._
 
 **Prepared by:** val  
-**Date:** 2026-05-18
+**Date:** 2026-05-18 (revised 2026-05-19 — restructured to 4 beats / 4 manipulatives)
 
 ---
 
@@ -17,17 +17,26 @@ Custom — ed-tech / elementary-math tutoring. Target concept is fraction equiva
 
 **What specific use cases will you support?**
 
-One scrollytelling-style lesson on fraction equivalence: a full-page narrative (Jupyter-notebook feel) where authored prose flows top-to-bottom and embedded interactive checkpoints anchor the scroll. Recommended 5-beat shape with three *different* manipulative metaphors in order — Beat 1: **chocolate bar** intro (break a 4-piece bar along grooves to see 1/2 = 2/4); Beat 2: chocolate MC check; Beat 3: **pizza slicing** exploration (draggable knife re-anchors equivalence via cuts + topping coverage); Beat 4: pizza MC check; Beat 5: **paper folding** consolidation (fold a square to overlay 1/2 and 2/4 — the student physically proves equivalence) ending in the final 'check for understanding' MC. Plus 1–2 optional open-ended 'what do you notice?' reflection beats. Multi-metaphor sequencing is intentional — it's the *multiple-representations* principle from math-ed research and the core of why Synthesis-style lessons transfer.
+One scrollytelling-style lesson on fraction equivalence: a full-page narrative (Jupyter-notebook feel) where authored prose flows top-to-bottom and embedded interactive checkpoints anchor the scroll. **4-beat shape with four manipulative metaphors in order**, where each beat folds intro + action + verification into one self-contained encounter (no separate "check" beats — every beat ends with a diagnostic MC inside the same material the student just manipulated):
 
-**Pedagogical principles guiding every section below** (woven into Sections 5, 6, 7, 10, 11, 14, 16): (a) *Concrete before abstract* — student manipulates the material before any prose introduces 1/2 = 2/4 notation; (b) *Control of error in the material* — the geometry itself shows correctness (two chocolate quarters visibly cover a half, paper folds physically overlay) rather than the tutor announcing it; (c) *Three-period lesson* — introduce (chocolate beat 1) → recognize (chocolate check + pizza explore, beats 2–3) → recall (pizza check + paper fold, beats 4–5); (d) *Description, not praise* — Haiku's system prompt forbids 'great job!' and requires observational feedback ('You put two quarter-bars together and they covered the same space as one half-bar'); (e) *Prepared environment* — only the active manipulative's pieces are on screen per beat (no clutter from prior metaphors); (f) *Redirect, never reprimand* — wrong-answer hints point back to the current material, never criticize; (g) *Self-paced reveal* — the scroll waits for completion before revealing the next beat; (h) *Aesthetic minimalism* — no badges, points, confetti, progress bars; calm serif typography and generous whitespace.
+- **Beat 1 — chocolate bar** (Period 1: introduce). The bar starts as a **single whole, with no pre-grooves** — the partition is not handed to the student. The student first breaks the bar in half at the midline (geometry constrains where the clean break is); then breaks each half in half, generating four equal quarters *by their own action*. The synthesis moment: two quarter-pieces snap to cover one half-piece. Fraction notation 1/2 = 2/4 arrives **only after** this is visible on screen. Beat closes with a diagnostic MC ("If you have 3 quarter pieces, is that more, less, or the same as 1/2?") whose distractors map to known misconceptions ("more pieces = less," "any quarters = a half").
+- **Beat 2 — pizza slicing** (Period 2: recognize). Draggable knife makes radial cuts. The conceptual job of this beat is *not* "do equivalence again with pizza" — it is to test that 1/2 = 2/4 still holds when pieces are wedges rather than rectangles (the property is shape-independent). Control of error: topping coverage visibly mismatches when cuts are uneven. Beat closes with a diagnostic MC on a new pair (e.g., 3/6 ↔ 1/2) with distractors that surface specific structural errors (grabbing the numerator alone, the denominator alone, or assembling unrelated numbers).
+- **Beat 3 — fraction blocks / cuisenaire-style rods** (Period 2: recognize). The student arranges short rods (the "quarters") to match the length of a longer rod (the "half"), and two of those longer rods to match a "whole" rod. Equivalence shows up as *physical congruence of length* — the most rigorously self-correcting of the four materials, because tile length is exact and unmatched configurations visibly fall short. This is the bridge from food metaphors to abstract form: the rods are pure modular tiles, no semantic context. Beat closes with a diagnostic MC ("Which rod combination is the same as the 1/2 rod?").
+- **Beat 4 — paper folding** (Period 3: recall, with built-in generalization). Fold a square in half. Then a **choice point**: two ghosted fold-direction options appear (perpendicular preserves the half-line crease; parallel destroys it). If the student picks parallel, the half-line crease visibly splits — the structure collapses *in the material itself*, redirecting the student without any narrator scolding (Montessori "redirect, never reprimand" baked into geometry). After the perpendicular fold gives 1/2 = 2/4, a **third fold** reveals 1/2 = 2/4 = 4/8 on one piece of paper — this single move converts the lesson from "one equivalence relation" to "the equivalence concept (one fraction has infinitely many names)." The final 'check for understanding' MC is a **transfer test** featuring a pair the student has never manipulated (e.g., 3/6 = 1/2) — a correct tap means the concept generalized, not that the specific halves/quarters were memorized.
+
+Plus 1–2 optional reflection beats, **anchored to the material on screen** rather than generically "what do you notice?" — e.g., "Look at your chocolate pieces. Tell me one thing you see." / "You did the same thing with chocolate and with pizza. What's the same? What's different?" / "Hold up the folded paper. What do all those creases tell you?"
+
+Multi-metaphor sequencing is intentional and the order is chosen so each transition shifts exactly one variable: chocolate → pizza (linear partition → radial partition, still real-world and discrete); pizza → blocks (real-world → abstract, still discrete); blocks → paper (discrete → continuous, still abstract). This forces the student to extract the equivalence property out of each material's specifics — it's the *multiple-representations* principle from math-ed research and the core of why Synthesis-style lessons transfer.
+
+**Pedagogical principles guiding every section below** (woven into Sections 5, 6, 7, 10, 11, 14, 16): (a) *Concrete before abstract* — student manipulates the material before any prose introduces 1/2 = 2/4 notation; (b) *Control of error in the material* — the geometry itself shows correctness (two chocolate quarters visibly cover a half, paper folds physically overlay) rather than the tutor announcing it; (c) *Three-period lesson* — introduce (chocolate, beat 1) → recognize (pizza + blocks, beats 2–3) → recall (paper, beat 4); (d) *Description, not praise* — Haiku's system prompt forbids 'great job!' and requires observational feedback ('You put two quarter-bars together and they covered the same space as one half-bar'); (e) *Prepared environment* — only the active manipulative's pieces are on screen per beat (no clutter from prior metaphors); (f) *Redirect, never reprimand* — wrong-answer hints point back to the current material, never criticize; (g) *Self-paced reveal* — the scroll waits for completion before revealing the next beat; (h) *Aesthetic minimalism* — no badges, points, confetti, progress bars; calm serif typography and generous whitespace.
 
 **What are the verification requirements for this domain?**
 
-Math correctness is deterministic and gated server-side: MC bubble answers checked against a preselected key; manipulative end-states compared to expected fraction values. Critically, the manipulatives are built with Montessori-style **control of error** — two chocolate quarter-pieces visibly snap to cover the same area as a half-bar; folded paper visibly overlays prior creases — so the student often *sees* the equivalence before any verdict appears, and the verdict only ratifies what the geometry already showed. Open-ended reflection beats are non-blocking. Pedagogical tone (warm, observational, no praise-bombing) is verified by sample-review of session transcripts during the build week.
+Math correctness is deterministic and gated server-side: MC bubble answers checked against a preselected key; manipulative end-states compared to expected fraction values. Critically, the manipulatives are built with Montessori-style **control of error** — two chocolate quarter-pieces visibly snap to cover the same area as a half-bar; pizza-wedge cuts only validate when angles are even; fraction rods only tile cleanly to matching total lengths; folded paper visibly overlays prior creases — so the student often *sees* the equivalence before any verdict appears, and the verdict only ratifies what the geometry already showed. Open-ended reflection beats are non-blocking. Pedagogical tone (warm, observational, no praise-bombing) is verified by sample-review of session transcripts during the build week.
 
 **What data sources will you need access to?**
 
-No external data sources. Inputs are the authored lesson script (JSON: 5 beats, each with prose + manipulative widget + MC keys + hint-seed lines), the live manipulative state (chocolate / pizza / paper), and the student's bubble selections / reflection text. No student PII storage in v1.
+No external data sources. Inputs are the authored lesson script (JSON: 4 beats, each with prose + manipulative widget + diagnostic MC distractors + observational hint-seed lines + anchored reflection prompt), the live manipulative state (chocolate / pizza / blocks / paper), and the student's bubble selections / reflection text. No student PII storage in v1.
 
 ### 2. Scale & Performance
 
@@ -37,7 +46,7 @@ Prototype-scale: 1 student per session, demo runs only during build week + final
 
 **Acceptable latency for responses?**
 
-Inferred budgets: narrator TTS first-audio-out p95 < 800ms after a beat reveals (pre-generate paragraph audio one beat ahead to mask this); manipulative animations 60fps (<16ms frame budget — important for the chocolate-snap, pizza-cut, and paper-fold animations to feel tactile); LangGraph node transitions < 500ms; Haiku hint generation after a wrong MC p95 < 1.2s (show a 'thinking…' state if exceeded). The whole feel must read as 'instant scroll-and-respond.'
+Inferred budgets: narrator TTS first-audio-out p95 < 800ms after a beat reveals (pre-generate paragraph audio one beat ahead to mask this); manipulative animations 60fps (<16ms frame budget — important for the chocolate-snap, pizza-cut, rod-tile-click, and paper-fold-crease animations to feel tactile); LangGraph node transitions < 500ms; Haiku hint generation after a wrong MC p95 < 1.2s (show a 'thinking…' state if exceeded). The whole feel must read as 'instant scroll-and-respond.'
 
 **Concurrent user requirements?**
 
@@ -55,7 +64,7 @@ Demo-level: low absolute cost (no real student outcomes at stake), but high repu
 
 **What verification is non-negotiable?**
 
-Deterministic check of MC bubble selections and manipulative end-states against the authored key, before any narrator response or next-beat reveal. Haiku's paraphrased reaction / hint never overrides the deterministic verdict. Additionally, the manipulatives themselves are non-negotiably self-correcting (Montessori control-of-error): chocolate pieces snap precisely or not at all; pizza slices have exact angular bounds; paper folds align on the underlying grid.
+Deterministic check of MC bubble selections and manipulative end-states against the authored key, before any narrator response or next-beat reveal. Haiku's paraphrased reaction / hint never overrides the deterministic verdict. Additionally, the manipulatives themselves are non-negotiably self-correcting (Montessori control-of-error): chocolate pieces snap precisely or not at all; pizza slices have exact angular bounds; fraction rods only tile cleanly to matching total lengths; paper folds align on the underlying grid (and on Beat 4, the wrong fold-direction choice visibly destroys the half-line crease, surfacing the redirection in the material itself).
 
 **Human-in-the-loop requirements?**
 
@@ -89,15 +98,15 @@ LangGraph (user decision). Fit is excellent: scrollytelling beats map 1:1 to Lan
 
 **Single agent or multi-agent architecture?**
 
-Single agent. One LangGraph instance owns the lesson; the three manipulatives (chocolate, pizza, paper) and the MC bubble component are UI surfaces, not sibling agents. Multi-agent adds coordination cost with no payoff for a 1-week scripted lesson.
+Single agent. One LangGraph instance owns the lesson; the four manipulatives (chocolate, pizza, blocks, paper) and the MC bubble component are UI surfaces, not sibling agents. Multi-agent adds coordination cost with no payoff for a 1-week scripted lesson.
 
 **State management requirements?**
 
-LangGraph state holds: current_beat_id from the authored set [chocolate_intro, chocolate_check, pizza_explore, pizza_check, paper_fold_final], beat_history, lesson_phase mapped to Montessori three-period lesson (period_1_introduce ↔ chocolate_intro; period_2_recognize ↔ chocolate_check + pizza_explore; period_3_recall ↔ pizza_check + paper_fold_final), per-beat completion status, MC selections, manipulative snapshots, reflection-text history, hint-attempt counter per checkpoint, adaptive-pacing flag. Persist to local storage so a page reload resumes mid-lesson cleanly during demo.
+LangGraph state holds: current_beat_id from the authored set [chocolate, pizza, blocks, paper], beat_history, lesson_phase mapped to Montessori three-period lesson (period_1_introduce ↔ chocolate; period_2_recognize ↔ pizza + blocks; period_3_recall ↔ paper), per-beat completion status, MC selections, manipulative snapshots, reflection-text history, hint-attempt counter per checkpoint, adaptive-pacing flag, notation_introduced flag (whether the fraction symbol "1/2 = 2/4" has been revealed yet — gates prose templates so notation never appears before the student has manipulated). Persist to local storage so a page reload resumes mid-lesson cleanly during demo.
 
 **Tool integration complexity?**
 
-Low. ~7 internal tools (see Section 7). No external APIs beyond ElevenLabs TTS and the Anthropic API. UI ↔ agent communication via WebSocket events carrying state diffs. Inferred frontend stack: React + dnd-kit (excellent iPad touch support, pointer events, accessibility) + Framer Motion (spring physics for chocolate-snap, pizza-cut, paper-fold animations) + a lightweight scroll-snap library or hand-rolled IntersectionObserver for the notebook scroll behavior. Considered and rejected: react-konva/PixiJS (canvas overhead not justified for ~10 draggable pieces), HTML5 native drag-drop (broken on iOS Safari touch), Yjs (no collaboration requirement).
+Low. ~7 internal tools (see Section 7). No external APIs beyond ElevenLabs TTS and the Anthropic API. UI ↔ agent communication via WebSocket events carrying state diffs. Inferred frontend stack: React + dnd-kit (excellent iPad touch support, pointer events, accessibility) + Framer Motion (spring physics for chocolate-snap, pizza-cut, rod-tile-click, paper-fold-crease animations) + a lightweight scroll-snap library or hand-rolled IntersectionObserver for the notebook scroll behavior. Considered and rejected: react-konva/PixiJS (canvas overhead not justified for ~10 draggable pieces), HTML5 native drag-drop (broken on iOS Safari touch), Yjs (no collaboration requirement).
 
 ### 6. LLM Selection
 
@@ -123,19 +132,19 @@ Yes — Haiku 4.5 at ~$1/$5 per Mtok puts a full lesson well under $0.05 in LLM 
 
 **What tools does your agent need?**
 
-validate_mc(beat_id, selected_option) → deterministic correct/incorrect against the authored key. read_manipulative_state(manipulative_id) → current state of the active manipulative (chocolate bar pieces / pizza slices + toppings / paper fold creases). validate_manipulative(beat_id) → deterministic check the student's end-state matches the expected fraction relation. generate_hint(beat_id, attempt_count, manipulative_snapshot) → Haiku hint that names the *specific* manipulative on screen and redirects the student back to it (Montessori 'redirect, never reprimand'). paraphrase_paragraph(beat_id) → small variation on authored narrator prose, observational tone enforced by system prompt. classify_reflection(text) → categorizes a student's observation (on-topic / partial / off-topic); reaction is always observational, never evaluative. advance_to_beat(next_beat_id) → state transition, optionally chosen by Haiku for adaptive pacing.
+validate_mc(beat_id, selected_option) → deterministic correct/incorrect against the authored key (each beat carries 3 diagnostic distractors that each map to a known misconception, so a wrong tap reveals which mental model is broken). read_manipulative_state(manipulative_id) → current state of the active manipulative (chocolate bar pieces / pizza slices + toppings / fraction rod arrangements / paper fold creases). validate_manipulative(beat_id) → deterministic check the student's end-state matches the expected fraction relation. generate_hint(beat_id, attempt_count, manipulative_snapshot) → Haiku hint that names the *specific* manipulative on screen and redirects the student back to it (Montessori 'redirect, never reprimand'). paraphrase_paragraph(beat_id) → small variation on authored narrator prose, observational tone enforced by system prompt. classify_reflection(text) → categorizes a student's observation (on-topic / partial / off-topic); reaction is always observational, never evaluative. advance_to_beat(next_beat_id) → state transition, optionally chosen by Haiku for adaptive pacing.
 
 **External API dependencies?**
 
-ElevenLabs TTS (text-to-speech only; no Conversational AI, no STT) and Anthropic API (Haiku 4.5). Pre-generate the next beat's audio one beat ahead to hide TTS latency. Three manipulatives (chocolate, pizza, paper) are rendered as separate React components — each uses dnd-kit for drag input and Framer Motion for snap / cut / fold animations. Per **Montessori prepared environment**, the 'tray' on screen reshapes per beat: chocolate beats show only chocolate pieces, pizza beats only the pizza + knife + toppings, paper beat only the square + fold guides — no clutter from prior manipulatives.
+ElevenLabs TTS (text-to-speech only; no Conversational AI, no STT) and Anthropic API (Haiku 4.5). Pre-generate the next beat's audio one beat ahead to hide TTS latency. Four manipulatives (chocolate, pizza, blocks, paper) are rendered as separate React components — each uses dnd-kit for drag input and Framer Motion for snap / cut / tile / fold animations. Per **Montessori prepared environment**, the 'tray' on screen reshapes per beat: chocolate beat shows only chocolate pieces, pizza beat only the pizza + knife + toppings, blocks beat only the fraction rod set, paper beat only the square + fold guides — no clutter from prior manipulatives. All four share a common visual grammar (warm off-white background, 2px line weight, warm serif typography, identical gesture vocabulary — tap to break/cut/place/fold, drag to move pieces, long-press to undo) so cognitive load shifts between beats live in the math, not the interface. Each material additionally carries its own **signature haptic identity**: chocolate has a soft snap, pizza has a knife glide-and-thunk, rods have a click-tile-into-place sound, paper has a crisp crease — these are not reward layers but the material's *voice*, and they're what makes a 7–10yo want to do the action again.
 
 **Mock vs real data for development?**
 
-Not applicable in the usual sense — there is no production data source. Author the lesson script JSON (5 beats — chocolate_intro, chocolate_check, pizza_explore, pizza_check, paper_fold_final — each with prose + manipulative widget config + MC keys + hint-seed lines) on day 1; build a labeled set of ~20 reflection-text examples per category (on-topic / partial / off-topic) to drive classify_reflection eval. Also build a 'hint-tone' rubric set (good vs bad hints) where 'bad' includes praise-bombing ('Great job!') and 'good' is observational + redirects to the active manipulative — this enforces the Montessori prompt discipline in CI.
+Not applicable in the usual sense — there is no production data source. Author the lesson script JSON (4 beats — chocolate, pizza, blocks, paper — each with prose + manipulative widget config + 3 diagnostic MC distractors per beat + 2–3 observational hint-seed lines per beat per attempt-count + an anchored reflection prompt) on day 1; build a labeled set of ~20 reflection-text examples per category (on-topic / partial / off-topic) to drive classify_reflection eval. Also build a 'hint-tone' rubric set (good vs bad hints) where 'bad' includes praise-bombing ('Great job!') and 'good' is observational + redirects to the active manipulative — this enforces the Montessori prompt discipline in CI.
 
 **Error handling per tool?**
 
-validate_mc and validate_manipulative are pure-function — cannot fail. generate_hint / paraphrase_paragraph timeout → fall back to canonical authored hint / paragraph text; lesson remains playable. classify_reflection failure → drop the reflection beat to a generic *observational* fallback ('I love that you're noticing things — what did you see in the chocolate?') and continue. ElevenLabs TTS failure → silently degrade to text-only (the paragraph is on the page anyway); never block the lesson.
+validate_mc and validate_manipulative are pure-function — cannot fail. generate_hint / paraphrase_paragraph timeout → fall back to canonical authored hint / paragraph text; lesson remains playable. classify_reflection failure → drop the reflection beat to a generic *observational* fallback anchored to the active material ('Tell me what you noticed about the chocolate.' / '…the pizza.' / '…the blocks.' / '…the paper.') and continue. ElevenLabs TTS failure → silently degrade to text-only (the paragraph is on the page anyway); never block the lesson.
 
 ### 8. Observability Strategy
 
@@ -145,7 +154,7 @@ LangSmith. Native LangGraph integration means zero-config traces of every beat t
 
 **What metrics matter most?**
 
-Beat-completion rate (do students reach the end?), MC accuracy per checkpoint, time-per-beat (where do students stall?), hint-trigger rate per manipulative (chocolate / pizza / paper — which is hardest?), reflection-beat opt-in rate, total LLM + TTS cost per lesson. Also: hint-tone rubric pass rate (does generate_hint comply with Montessori observational discipline?).
+Beat-completion rate (do students reach the end?), MC accuracy per checkpoint, time-per-beat (where do students stall?), hint-trigger rate per manipulative (chocolate / pizza / blocks / paper — which is hardest?), distractor-tap distribution per MC (which misconceptions are live for this student?), reflection-beat opt-in rate, total LLM + TTS cost per lesson. Also: hint-tone rubric pass rate (does generate_hint comply with Montessori observational discipline?).
 
 **Real-time monitoring needs?**
 
@@ -181,11 +190,11 @@ Every 'correct' verdict shown to the student must come from validate_mc or valid
 
 **Fact-checking data sources?**
 
-The authored lesson script (MC keys + expected manipulative end-states per beat: chocolate-bar piece positions, pizza-slice angular bounds, paper-fold crease alignment). No external fact-checking; math is closed-form and answers are preselected.
+The authored lesson script (MC keys + expected manipulative end-states per beat: chocolate-bar piece positions, pizza-slice angular bounds, fraction-rod tile lengths, paper-fold crease alignment). No external fact-checking; math is closed-form and answers are preselected.
 
 **Confidence thresholds?**
 
-classify_reflection confidence < 0.6 → drop the reflection beat into a safe observational canonical line ('I love that you're noticing — what did you see in the [chocolate / pizza / paper]?') rather than risk an off-tone reaction. MC and manipulative checks have no confidence dimension.
+classify_reflection confidence < 0.6 → drop the reflection beat into a safe observational canonical line ('Tell me what you noticed about the [chocolate / pizza / blocks / paper].') rather than risk an off-tone reaction. MC and manipulative checks have no confidence dimension.
 
 **Escalation triggers?**
 
@@ -215,7 +224,7 @@ Every Haiku-generated line has a canonical authored fallback. Every TTS audio fi
 
 **Prompt injection prevention?**
 
-Low risk surface (target user is a 7–10yo, primary inputs are bubble taps and drag-drop on chocolate/pizza/paper). The only injection vector is reflection-text free input — treat as data inside delimited tags in the system prompt; never let it control tool selection.
+Low risk surface (target user is a 7–10yo, primary inputs are bubble taps and drag-drop on chocolate/pizza/blocks/paper). The only injection vector is reflection-text free input — treat as data inside delimited tags in the system prompt; never let it control tool selection.
 
 **Data leakage risks?**
 
@@ -233,11 +242,11 @@ Local-only session transcripts (beat order, manipulative state diffs, MC selecti
 
 **Unit tests for tools?**
 
-Yes. validate_mc and validate_manipulative get the most coverage — every authored beat's correct + incorrect cases across all three manipulatives (chocolate piece combinations, pizza slice configurations, paper fold alignments). paraphrase_paragraph and generate_hint have snapshot tests (do they call Haiku with the expected prompt structure and Montessori-discipline system prompt?), not output-equality tests.
+Yes. validate_mc and validate_manipulative get the most coverage — every authored beat's correct + incorrect cases across all four manipulatives (chocolate piece combinations, pizza slice configurations, fraction rod tile arrangements, paper fold alignments including the perpendicular-vs-parallel choice point and the third-fold generalization state). paraphrase_paragraph and generate_hint have snapshot tests (do they call Haiku with the expected prompt structure and Montessori-discipline system prompt?), not output-equality tests.
 
 **Integration tests for agent flows?**
 
-Yes. Golden-path test (student answers correctly across all 5 beats), plus four failure paths: (a) two wrong chocolate MC attempts then correct, (b) pizza manipulative end-state wrong → hint redirects to pizza → correct, (c) Haiku timeout → canonical hint surfaces, (d) ElevenLabs timeout → text-only mode engages cleanly. Runs in CI on every PR.
+Yes. Golden-path test (student answers correctly across all 4 beats, including the final transfer MC with a never-manipulated pair like 3/6 = 1/2), plus five failure paths: (a) two wrong chocolate MC attempts then correct, (b) pizza manipulative end-state wrong → hint redirects to pizza → correct, (c) blocks: student tries a rod combination that comes up short → length mismatch is visible → student self-corrects, (d) paper Beat 4: student picks parallel fold direction → half-line crease visibly splits → student redirects to perpendicular, (e) Haiku timeout → canonical hint surfaces, (f) ElevenLabs timeout → text-only mode engages cleanly. Runs in CI on every PR.
 
 **Adversarial testing approach?**
 
@@ -259,7 +268,7 @@ Out of scope — see above.
 
 **Documentation requirements?**
 
-README is a deliverable per the brief — must cover how to run the app and a brief overview of the technical approach: LangGraph beat-node graph, three-manipulative sequence (chocolate → pizza → paper), three-period lesson mapping, ElevenLabs TTS integration, Haiku's four roles, Montessori-discipline prompt design, manipulative architecture with control-of-error, scrollytelling UX pattern.
+README is a deliverable per the brief — must cover how to run the app and a brief overview of the technical approach: LangGraph beat-node graph (4 beats), four-manipulative sequence (chocolate → pizza → blocks → paper), three-period lesson mapping, ElevenLabs TTS integration, Haiku's four roles, Montessori-discipline prompt design, manipulative architecture with control-of-error, shared visual grammar and per-material haptic identity, scrollytelling UX pattern.
 
 **Community engagement plan?**
 
@@ -287,7 +296,7 @@ Git revert + Vercel redeploy. Pin a 'last-known-good' tag before the final demo 
 
 **How will you collect user feedback?**
 
-Self + Patrick during the build week; the 1–2 minute demo video is the primary feedback artifact. Inferred: if any children test the demo, run a short post-lesson interview ('which manipulative was the most fun — chocolate, pizza, or paper? where did you get stuck?') alongside session-transcript review.
+Self + Patrick during the build week; the 1–2 minute demo video is the primary feedback artifact. Inferred: if any children test the demo, run a short post-lesson interview ('which manipulative was the most fun — chocolate, pizza, blocks, or paper? where did you get stuck? could you tell that 1/2 has lots of different names?') alongside session-transcript review.
 
 **Eval-driven improvement cycle?**
 
@@ -295,8 +304,8 @@ Add any observed misclassified reflection or weak hint to the labeled set immedi
 
 **Feature prioritization approach?**
 
-Brief's three functional requirements (conversational tutor, interactive manipulative, lesson flow with check-for-understanding) instantiated here as a scrollytelling narrative with three sequenced manipulatives (chocolate → pizza → paper) and three MC checks, sequenced via the Montessori three-period lesson. The eight pedagogical principles from Section 1 (concrete-before-abstract, control-of-error, three-period-lesson, description-not-praise, prepared-environment, redirect-not-reprimand, self-paced-reveal, aesthetic-minimalism) are the design north star — cut anything that contradicts them, even if it would otherwise be a 'cool' feature.
+Brief's three functional requirements (conversational tutor, interactive manipulative, lesson flow with check-for-understanding) instantiated here as a scrollytelling narrative with four sequenced manipulatives (chocolate → pizza → blocks → paper) and four diagnostic MC checks (one embedded inside each beat — no separate check beats), sequenced via the Montessori three-period lesson and ending in a transfer MC that tests generalization to a never-manipulated equivalence pair. The eight pedagogical principles from Section 1 (concrete-before-abstract, control-of-error, three-period-lesson, description-not-praise, prepared-environment, redirect-not-reprimand, self-paced-reveal, aesthetic-minimalism) are the design north star — cut anything that contradicts them, even if it would otherwise be a 'cool' feature.
 
 **Long-term maintenance plan?**
 
-Out of scope — 1-week sprint deliverable, not a maintained product. Flag for the next conversation if SuperBuilders wants to extend the prototype to a real curriculum (multi-metaphor sequencing scales naturally to more concepts: division, ratios, percentages — each gets its own three-period progression across fresh manipulatives).
+Out of scope — 1-week sprint deliverable, not a maintained product. Flag for the next conversation if SuperBuilders wants to extend the prototype to a real curriculum (multi-metaphor sequencing scales naturally to more concepts: division, ratios, percentages — each gets its own three-period progression across fresh manipulatives, ideally four of them following the same concrete → abstract gradient: real-world-linear → real-world-radial → abstract-discrete → abstract-continuous).

@@ -23,10 +23,15 @@ export type AmbientAudioProps = {
 export function AmbientAudio({ player: injected }: AmbientAudioProps = {}) {
   const player = injected ?? getAmbientPlayer();
 
+  // Server snapshot is a constant default rather than `player.isMuted`: the
+  // server has no localStorage and reports false, but on client hydration the
+  // singleton has already read localStorage and may report true. Returning a
+  // constant keeps SSR + the client's hydration paint in agreement;
+  // useSyncExternalStore re-renders to the live state right after.
   const muted = useSyncExternalStore(
     player.subscribe,
     player.isMuted,
-    player.isMuted,
+    () => false,
   );
 
   useEffect(() => {
@@ -47,6 +52,11 @@ export function AmbientAudio({ player: injected }: AmbientAudioProps = {}) {
         capture: true,
       });
       document.removeEventListener('keydown', onGesture, { capture: true });
+      // Soft-pause when navigating away — this is what keeps the ambient
+      // loop bound to the home page. The user's mute preference is
+      // untouched; returning to home calls `start()` again and resumes
+      // playback unless they've muted in the meantime.
+      player.pause();
     };
   }, [player]);
 

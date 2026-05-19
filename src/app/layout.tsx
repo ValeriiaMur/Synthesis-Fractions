@@ -31,6 +31,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${workSans.variable} ${jetbrainsMono.variable}`}
+      data-scroll-behavior="smooth"
     >
       <body>{children}</body>
     </html>

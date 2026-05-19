@@ -21,10 +21,7 @@ import type {
 } from '@/lib/lesson/types';
 import { stripMarkup } from '@/lib/lesson/stripMarkup';
 import { isBeatComplete, lookupHint } from '@/lib/lesson/completes';
-import { fetchHint } from '@/lib/agent/hintClient';
-import { fetchAdvanceLine } from '@/lib/agent/advanceClient';
-import { fetchScaffoldedMC } from '@/lib/agent/scaffoldMCClient';
-import type { ManipulativeKind } from '@/lib/agent/lessonAgent';
+import { enterLineFor, reactToMC } from '@/lib/lesson/branching';
 import { getVoicePlayer } from '@/lib/voice/voicePlayer';
 import { Stars } from '@/components/space/Stars';
 import { GridBg } from '@/components/space/GridBg';
@@ -37,7 +34,8 @@ import { HintBubble } from './HintBubble';
 import { CelebrationBubble } from './CelebrationBubble';
 import { Intro } from './Intro';
 import { Outro } from './Outro';
-import { JumpButton } from './JumpButton';
+import { StudentEcho } from './StudentEcho';
+import { manipSummary } from '@/lib/lesson/manipSummary';
 import { ChocolateBar } from '@/components/manipulatives/ChocolateBar';
 import { PizzaSlicer } from '@/components/manipulatives/PizzaSlicer';
 import { PaperFold } from '@/components/manipulatives/PaperFold';
@@ -56,8 +54,6 @@ export type LessonPageProps = {
 };
 
 type CellStatus = 'locked' | 'active' | 'done';
-
-const SCAFFOLD_THRESHOLD = 3;
 
 function phaseLabel(p: LessonPhase): string {
   if (p === 'period_1_introduce') return 'P1 · introduce';
@@ -120,39 +116,33 @@ function renderManipulative(
   );
 }
 
-function manipulativeKind(beat: Beat): ManipulativeKind | null {
-  const k = beat.manipulative?.kind;
-  if (k === 'chocolate' || k === 'pizza' || k === 'paper' || k === 'fractionbox') {
-    return k;
-  }
-  return null;
-}
-
 /**
- * Top-level lesson screen + state machine + agent wiring.
+ * Top-level lesson screen + state machine + branching wiring.
  *
  * Layout: full-width notebook. The chat rail was retired in favour of a
  * voice-driven, view-driven experience — the kid reads (or listens to) one
- * cell, completes the exercise, and the lesson advances. There is no more
- * free-text chat with Ari; reactions live in the hint / celebration bubbles
- * inside each cell and in the voice queue.
+ * cell, completes the exercise, and the lesson advances. Each cell is one
+ * turn in a vertical chat: Prose (Ari speaks) → manipulative/MC (student
+ * responds) → StudentEcho (response mirrored) → Hint/Celebration (Ari
+ * reacts) → next cell unlocks.
  *
- * Canonical-first contract: every authored line (hints, prose, MC) renders
- * immediately. The LLM (Haiku 4.5) fires in the background and *swaps* the
- * displayed text only when it resolves under budget. If the network or the
- * model fails, the canonical copy stays put.
+ * Fully scripted: every tutor line is authored in `lessonData.ts`. The
+ * branching layer is the pure `branching.ts` module — no LLM, no network,
+ * no async races. ElevenLabs TTS voices the authored lines.
  *
  * Voice contract (see also summary.md):
  *  - On mount the voice queue is cleared and the active beat's prose is
- *    queued. Re-entering the route from anywhere starts fresh on whichever
- *    cell the kid is on.
- *  - On unmount the queue is cleared (the currently-playing utterance
- *    finishes — voicePlayer.stop is non-interrupting by design).
- *  - During exercises (manipulative tinkering, considering an MC) the
- *    voice is silent. speakAri is only called from reaction sites below.
- *  - Wrong MC → speak the hint (LLM if available, canonical otherwise).
- *  - Correct MC → speak the celebration; 600ms later advanceTo races the
- *    advance line and queues [advance, next prose] in visual order.
+ *    queued (preceded by a one-time intro on a fresh start). Re-entering
+ *    the route always starts fresh on whichever cell the kid is on.
+ *  - On unmount the queue is cleared and the in-flight utterance is
+ *    aborted via the AbortSignal wired into voicePlayer.
+ *  - During exercises the voice is silent. speakAri only fires at four
+ *    decision points: wrong MC, correct MC, advance, end-of-lesson.
+ *  - Wrong MC → speak the hint chosen by `reactToMC` (per-option-specific
+ *    if authored, otherwise the attempt-indexed canonical).
+ *  - Correct MC → speak the authored `correctReply`; 600ms later
+ *    `advanceTo` fires and queues `[enterLine, nextProse]` in visual
+ *    order. No fetch, no race.
  */
 export function LessonPage({
   lesson,
@@ -203,10 +193,6 @@ export function LessonPage({
     [beats],
   );
 
-  // Per-request guards so a stale LLM response can't clobber a newer one.
-  const hintReqRef = useRef<Partial<Record<BeatId, number>>>({});
-  const scaffoldReqRef = useRef<Partial<Record<BeatId, number>>>({});
-
   // ---- voice ----
   // Reveal-gated: each speakAri call defers `voice.speak` through a double
   // requestAnimationFrame so React has time to commit + paint the new
@@ -249,6 +235,7 @@ export function LessonPage({
   // leak a stale speak.
   const initialActiveIdxRef = useRef(activeIdx);
   const initialBeatsRef = useRef(beats);
+  const initialStudentNameRef = useRef(studentName);
   useEffect(() => {
     voice.stop();
     const idx = initialActiveIdxRef.current;
@@ -259,60 +246,132 @@ export function LessonPage({
       };
     }
     const text = stripMarkup(startBeat.prose);
+    // First-launch only: greet the kid and frame the Spirit run before the
+    // first beat's prose. Skipped on restore so the kid doesn't re-hear it.
+    const intro =
+      idx === 0
+        ? `Hi ${initialStudentNameRef.current}, I'm Ari. We're flying the Spirit today — four stops, then home.`
+        : null;
     let raf2 = 0;
     const raf1 = window.requestAnimationFrame(() => {
       raf2 = window.requestAnimationFrame(() => {
+        if (intro) voice.speak(intro);
         voice.speak(text);
       });
     });
     return () => {
       // Navigating away (or StrictMode's dev-mode remount) kills both the
-      // pending queue and the *deferred* speak. The currently-playing
-      // utterance still finishes — voicePlayer.stop is non-interrupting.
+      // pending queue and the *deferred* speak. With the AbortSignal wired
+      // through deps.play, voice.stop() also cuts the in-flight audio so
+      // Ari doesn't bleed into the next page mid-sentence.
       window.cancelAnimationFrame(raf1);
       if (raf2) window.cancelAnimationFrame(raf2);
       voice.stop();
     };
   }, [voice]);
 
-  /** Persist the lesson state on any meaningful change. Skipping `chat`
-   *  entirely now that the chat rail is gone; we still write an empty
-   *  array to keep the persisted shape backward-compatible. */
+  /** One-shot scroll-to-active-cell when the page mounts on a *restored*
+   *  beat (Continue/Resume). Fresh starts at beat 0 don't need it — the
+   *  notebook is already scrolled to the top.
+   *
+   *  Lands the cell at the TOP of the notebook viewport (`block: 'start'`)
+   *  so the resumed cell is the first thing the kid sees — Intro + earlier
+   *  cells scroll off the top. Uses instant (`auto`) behaviour for the
+   *  one-shot jump; a smooth animation made it feel like the page was
+   *  drifting back up to the Intro.
+   *
+   *  The 200ms delay gives the cell's manipulative (which mounts and may
+   *  publish its initial state synchronously) time to settle so the
+   *  measured scroll offset is accurate. */
+  const initialCellRefRef = useRef(cellRefs[activeIdx]);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const id = window.requestAnimationFrame(() => {
+    if (initialActiveIdxRef.current === 0) return;
+    const id = window.setTimeout(() => {
+      const target = initialCellRefRef.current?.current;
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 200);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  /** Build the current snapshot. Pulled out so the persist-on-state-change
+   *  effect *and* the beforeunload backstop can serialize the same thing. */
+  const buildSnapshot = useCallback(
+    () =>
+      snapshotLesson(lesson.id, {
+        activeIdx,
+        doneIds: Array.from(doneSet),
+        mcSel,
+        mcStatus,
+        hintAttempts,
+        manipStates,
+        liveHints,
+        scaffoldedMC,
+        chat: [],
+      }),
+    [
+      lesson.id,
+      activeIdx,
+      doneSet,
+      mcSel,
+      mcStatus,
+      hintAttempts,
+      manipStates,
+      liveHints,
+      scaffoldedMC,
+    ],
+  );
+
+  /** Persist the lesson state on any meaningful change.
+   *
+   *  Synchronous write — no rAF batching. The rAF gap used to lose the
+   *  most recent advance when the user closed the tab in the ~16ms
+   *  between the state update committing and the rAF callback running.
+   *  localStorage.setItem is fast (a few ms even on iPad), and effects
+   *  already coalesce multiple state changes from one render pass into a
+   *  single fire, so there is no measurable perf cost. */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        storageKey(lesson.id),
+        JSON.stringify(buildSnapshot()),
+      );
+    } catch {
+      // localStorage can throw if disabled / over quota; ignore.
+    }
+  }, [lesson.id, buildSnapshot]);
+
+  /** Belt-and-suspenders: the tab-close path. Even with synchronous
+   *  writes, there's a tiny window between React committing new state
+   *  and the persistence effect firing (effects run after paint). If the
+   *  user closes the tab in that window, the latest commit is lost.
+   *  beforeunload fires synchronously before the page tears down, so
+   *  this guarantees the freshest in-memory state lands on disk. */
+  const buildSnapshotRef = useRef(buildSnapshot);
+  useEffect(() => {
+    buildSnapshotRef.current = buildSnapshot;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const flush = (): void => {
       try {
-        const snap = snapshotLesson(lesson.id, {
-          activeIdx,
-          doneIds: Array.from(doneSet),
-          mcSel,
-          mcStatus,
-          hintAttempts,
-          manipStates,
-          liveHints,
-          scaffoldedMC,
-          chat: [],
-        });
         window.localStorage.setItem(
           storageKey(lesson.id),
-          JSON.stringify(snap),
+          JSON.stringify(buildSnapshotRef.current()),
         );
       } catch {
-        // localStorage can throw if disabled / over quota; ignore.
+        // ignore — best effort on unload
       }
-    });
-    return () => window.cancelAnimationFrame(id);
-  }, [
-    lesson.id,
-    activeIdx,
-    doneSet,
-    mcSel,
-    mcStatus,
-    hintAttempts,
-    manipStates,
-    liveHints,
-    scaffoldedMC,
-  ]);
+    };
+    window.addEventListener('beforeunload', flush);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [lesson.id]);
 
   const statusFor = useCallback(
     (idx: number): CellStatus => {
@@ -324,11 +383,12 @@ export function LessonPage({
     [activeIdx, beats, doneSet],
   );
 
-  /** Move to beat `next`. Visually canonical-first (banner + cell unlock
-   *  flip immediately). Voice waits for `fetchAdvanceLine` so that an
-   *  in-world line, when present, is queued BEFORE the next beat's prose. */
+  /** Move to beat `next`. Synchronous: visual unlock + voice queue happen
+   *  in the same tick. The next beat's authored `enterLine` (if any) is
+   *  spoken *before* the prose, matching the visual order in the
+   *  notebook (the unlock banner sits above the cell). */
   const advanceTo = useCallback(
-    (next: number, fromBeatId: BeatId | null) => {
+    (next: number) => {
       if (next >= beatCount) return;
       const nextBeat = beats[next];
       setActiveIdx(next);
@@ -339,22 +399,10 @@ export function LessonPage({
         return ns;
       });
 
+      const enterLine = enterLineFor(nextBeat, studentName);
       const canonicalProse = stripMarkup(nextBeat.prose);
-      void (async () => {
-        const line = await fetchAdvanceLine({
-          fromBeatId,
-          toBeatId: nextBeat.id,
-          toBeatKindLabel: nextBeat.kindLabel,
-          studentName,
-        });
-        if (line) {
-          // Voice in visual order: advance line first, then prose.
-          speakAri(line);
-          speakAri(canonicalProse);
-        } else {
-          speakAri(canonicalProse);
-        }
-      })();
+      if (enterLine) speakAri(enterLine);
+      speakAri(canonicalProse);
 
       window.setTimeout(() => {
         cellRefs[next]?.current?.scrollIntoView?.({
@@ -391,7 +439,7 @@ export function LessonPage({
       // they wait for the MC answer.
       if (beat.mc) return;
       const next = idx + 1;
-      if (next < beatCount) advanceTo(next, beat.id);
+      if (next < beatCount) advanceTo(next);
     },
     [advanceTo, beats, beatCount],
   );
@@ -413,18 +461,26 @@ export function LessonPage({
       if (!mc) return;
       setMcSel((m) => ({ ...m, [beat.id]: opt.id }));
 
-      if (opt.id === mc.correctOptionId) {
+      const prevAttempts = hintAttempts[beat.id] ?? 0;
+      // Dispatch to the deterministic branching layer. The reaction tells
+      // us what to say and (on correct) where to go next — no async, no
+      // request guards, no swap-in races.
+      const reaction = reactToMC(beat, opt.id, prevAttempts, studentName);
+
+      if (reaction.kind === 'correct') {
         setMcStatus((s) => ({ ...s, [beat.id]: 'correct' }));
-        speakAri("That's right — you can see it.");
+        speakAri(reaction.line);
         setDoneSet((s) => {
           const n = new Set(s);
           n.add(beat.id);
           return n;
         });
-        const next = idx + 1;
-        if (next < beatCount) {
-          window.setTimeout(() => advanceTo(next, beat.id), 600);
+        if (reaction.nextBeatId) {
+          const next = idx + 1;
+          window.setTimeout(() => advanceTo(next), 600);
         } else {
+          // Final beat — speak the closing line. Authored inline because
+          // it isn't tied to any one beat. Move to lessonData if it grows.
           window.setTimeout(
             () =>
               speakAri(
@@ -436,99 +492,56 @@ export function LessonPage({
         return;
       }
 
-      // Wrong answer path.
+      // Wrong answer path. Store the chosen hint so the bubble can read it.
+      const nextAttemptCount = prevAttempts + 1;
       setMcStatus((s) => ({ ...s, [beat.id]: 'wrong' }));
-      const attempt = hintAttempts[beat.id] ?? 0;
-      const canonical = lookupHint(mc.canonicalHints, attempt);
-      const nextAttemptCount = attempt + 1;
       setHintAttempts((h) => ({ ...h, [beat.id]: nextAttemptCount }));
-      if (canonical) speakAri(canonical);
+      setLiveHints((m) => ({ ...m, [beat.id]: reaction.line }));
+      speakAri(reaction.line);
 
-      const kind = manipulativeKind(beat);
-      const correctOption = mc.options.find(
-        (o) => o.id === mc.correctOptionId,
-      );
-
-      // Background LLM hint swap.
-      if (kind && correctOption) {
-        const reqId = (hintReqRef.current[beat.id] ?? 0) + 1;
-        hintReqRef.current[beat.id] = reqId;
-        void (async () => {
-          const llmHint = await fetchHint({
-            manipulativeKind: kind,
-            question: mc.question,
-            correctOptionLabel: correctOption.label,
-            selectedOptionLabel: opt.label,
-            attemptCount: nextAttemptCount,
-          });
-          if (!llmHint) return;
-          if (hintReqRef.current[beat.id] !== reqId) return;
-          setLiveHints((m) => ({ ...m, [beat.id]: llmHint }));
-        })();
-      }
-
-      // Once at SCAFFOLD_THRESHOLD wrong attempts, fire scaffold_mc.
-      if (
-        nextAttemptCount >= SCAFFOLD_THRESHOLD &&
-        kind &&
-        !scaffoldedMC[beat.id]
-      ) {
-        const reqId = (scaffoldReqRef.current[beat.id] ?? 0) + 1;
-        scaffoldReqRef.current[beat.id] = reqId;
-        void (async () => {
-          const result = await fetchScaffoldedMC({
-            beatId: beat.id,
-            manipulativeKind: kind,
-            question: mc.question,
-            options: mc.options,
-            correctOptionId: mc.correctOptionId,
-          });
-          if (!result) return;
-          if (scaffoldReqRef.current[beat.id] !== reqId) return;
+      // Scaffold swap: branching.ts already factored in the threshold +
+      // whether a scaffolded variant exists. We just need to install it
+      // and clear the kid's current selection so they can pick fresh.
+      if (reaction.shouldScaffold && !scaffoldedMC[beat.id] && beat.mc) {
+        const sc = beat.mc.scaffolded;
+        if (sc) {
           const swapped: MCConfig = {
-            question: result.paraphrasedQuestion,
-            options: result.reducedOptions,
-            correctOptionId: mc.correctOptionId,
-            canonicalHints: mc.canonicalHints,
+            question: sc.question,
+            options: sc.options,
+            correctOptionId: sc.correctOptionId,
+            canonicalHints: beat.mc.canonicalHints,
+            correctReply: beat.mc.correctReply,
+            hintByWrongOption: beat.mc.hintByWrongOption,
           };
           setScaffoldedMC((m) => ({ ...m, [beat.id]: swapped }));
-          // Clear the learner's last selection + wrong-status so they can
-          // pick fresh from the simpler two-option set.
           setMcSel((m) => {
-            const next = { ...m };
-            delete next[beat.id];
-            return next;
+            const n = { ...m };
+            delete n[beat.id];
+            return n;
           });
           setMcStatus((m) => {
-            const next = { ...m };
-            delete next[beat.id];
-            return next;
+            const n = { ...m };
+            delete n[beat.id];
+            return n;
           });
           setLiveHints((m) => {
-            const next = { ...m };
-            delete next[beat.id];
-            return next;
+            const n = { ...m };
+            delete n[beat.id];
+            return n;
           });
-        })();
+        }
       }
     },
     [
       advanceTo,
       beats,
-      beatCount,
       hintAttempts,
       liveMCFor,
       scaffoldedMC,
       speakAri,
+      studentName,
     ],
   );
-
-  const jumpToActive = useCallback(() => {
-    cellRefs[activeIdx]?.current?.scrollIntoView?.({
-      behavior: 'smooth',
-      block: 'center',
-    });
-  }, [activeIdx, cellRefs]);
 
   const progress = useMemo<readonly ProgressSegmentStatus[]>(
     () =>
@@ -606,6 +619,11 @@ export function LessonPage({
                           (s) => handleManip(idx, s),
                           status === 'locked',
                         )}
+                        {manipDone && manipSummary(manipState) && (
+                          <StudentEcho done>
+                            {manipSummary(manipState)}
+                          </StudentEcho>
+                        )}
                       </div>
                     )}
 
@@ -633,6 +651,14 @@ export function LessonPage({
                           selectedId={sel}
                           status={mcs}
                         />
+                        {sel && (mcs === 'wrong' || mcs === 'correct') && (
+                          <StudentEcho done={mcs === 'correct'}>
+                            {
+                              liveMC.options.find((o) => o.id === sel)?.label ??
+                                sel
+                            }
+                          </StudentEcho>
+                        )}
                         {mcs === 'wrong' && (
                           <HintBubble>{liveHint ?? canonicalHint}</HintBubble>
                         )}
@@ -650,12 +676,6 @@ export function LessonPage({
 
             <Outro done={doneSet.size === beatCount} />
           </div>
-
-          <JumpButton
-            cellRefs={cellRefs}
-            activeIdx={activeIdx}
-            onJump={jumpToActive}
-          />
         </div>
       </div>
     </div>

@@ -44,6 +44,7 @@ export const lesson: Lesson = {
       kindLabel: 'check — flight log',
       prose:
         "Flight log needs a number. Count the squares on the tray.",
+      enterLine: "Tray's loaded, {name}. Now we log it.",
       mc: {
         question: 'How many quarter-squares ended up on the half-tray?',
         options: [
@@ -53,11 +54,28 @@ export const lesson: Lesson = {
           { id: 'four', label: 'Four' },
         ],
         correctOptionId: 'two',
+        correctReply:
+          "Two it is. That's why the half-tray fit perfectly.",
         canonicalHints: [
           'Look at the tray again. Slide the quarter-squares so they sit side by side, then count.',
           'Try lining up two quarter-squares in a row on the half-tray. See if they fit.',
           'Place two quarter-squares next to each other on the tray. Count what is there.',
         ],
+        hintByWrongOption: {
+          one: "Look at the tray — there's more than just one square sitting on it.",
+          three:
+            'Count just the squares that are on the half-tray. Three would hang over the edge.',
+          four:
+            'Four squares would be the whole bar — but the tray only holds the half.',
+        },
+        scaffolded: {
+          question: 'Two squares fit the half-tray. Was it one square or two?',
+          options: [
+            { id: 'one', label: 'One' },
+            { id: 'two', label: 'Two' },
+          ],
+          correctOptionId: 'two',
+        },
       },
     },
     {
@@ -66,6 +84,7 @@ export const lesson: Lesson = {
       kindLabel: 'manipulative — moon-pizza',
       prose:
         "Touchdown. The cook pulls a moon-pizza from the oven — sliced into {y}two equal halves{/y}. Four more friends just landed. Drag the knife to {y}cut each half in two{/y} — a slice for everyone.",
+      enterLine: 'Locked in, {name}. Pizza touchdown coming up.',
       manipulative: {
         kind: 'pizza',
         initialSlices: 2,
@@ -78,6 +97,7 @@ export const lesson: Lesson = {
       kindLabel: 'check — fair share',
       prose:
         "Before anyone bites in, check the share is fair. Hold one half against {b}two{/b} of the new slices.",
+      enterLine: "Slices look good. Let's double-check the share.",
       mc: {
         question: 'Is two slices out of four the same amount of pizza as one half?',
         options: [
@@ -85,10 +105,15 @@ export const lesson: Lesson = {
           { id: 'no', label: 'No' },
         ],
         correctOptionId: 'yes',
+        correctReply:
+          'Yes — two slices out of four covers the same shape as one half.',
         canonicalHints: [
           'Place two of the four slices next to one of the halves. Compare the amounts.',
           'Look at the pizza. Two of the four slices together — do they cover the same shape as one half?',
         ],
+        hintByWrongOption: {
+          no: 'Slide two slices together and lay them on one half. See whether they fit exactly.',
+        },
       },
     },
     {
@@ -97,6 +122,8 @@ export const lesson: Lesson = {
       kindLabel: 'manipulative + check — star-map',
       prose:
         "Heading home. The engineer hands you a square of star-paper. Fold it across the middle — that crease marks {y}one half{/y} of the sky. Fold the other way — the new crease splits each half into {y}quarter-coordinates{/y}.",
+      enterLine:
+        'Fair share confirmed. The engineer has a star-map for you.',
       manipulative: {
         kind: 'paper',
         targetFolds: ['horizontal', 'vertical'],
@@ -118,10 +145,33 @@ export const lesson: Lesson = {
           },
         ],
         correctOptionId: 'half-equals-two-quarters',
+        correctReply:
+          'Right — one half and two quarters are the same amount of sky.',
         canonicalHints: [
           'Look at the creases on the map. Count the quarter-sections inside one half-section.',
           'Trace one half of the map with your finger. Count how many quarter-sections fit inside it.',
         ],
+        hintByWrongOption: {
+          'half-equals-one-quarter':
+            'Trace one half on the map. How many quarter-sections fit inside it — one, or two?',
+          'quarter-bigger-than-half':
+            'Compare the pieces. A quarter is one of four equal parts; a half is one of two. Which one is bigger?',
+        },
+        scaffolded: {
+          question:
+            'Look at one half of the star-map. How many quarter-sections fit inside it?',
+          options: [
+            {
+              id: 'half-equals-one-quarter',
+              label: 'One quarter.',
+            },
+            {
+              id: 'half-equals-two-quarters',
+              label: 'Two quarters.',
+            },
+          ],
+          correctOptionId: 'half-equals-two-quarters',
+        },
       },
     },
     {
@@ -130,6 +180,7 @@ export const lesson: Lesson = {
       kindLabel: 'manipulative — warp-drive fraction-lock',
       prose:
         "Back on the Spirit. The warp-drive's fraction-lock fires through {y}three checkpoints{/y} — play with the bricks, build {y}one whole{/y} two different ways, then take on three short quests. Each rail is one whole.",
+      enterLine: "Home stretch, {name}. The warp-drive's waiting.",
       manipulative: {
         kind: 'blockstudio',
         palette: [
