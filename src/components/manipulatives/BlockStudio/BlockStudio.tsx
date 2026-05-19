@@ -1,13 +1,25 @@
 'use client';
 
 import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type {
   BlockStudioConfig,
@@ -35,7 +47,8 @@ import {
   stepCheckPlay,
 } from './blockStudioLogic';
 import type {
-  DragState,
+  ActiveDrag,
+  DragSource,
   PaletteFrac,
   QuestDescriptor,
   Rail,
@@ -44,12 +57,12 @@ import type {
 } from './types';
 
 const PALETTE_COLORS: Readonly<Record<number, string>> = {
-  2: '#f06b85', // red
-  3: '#ffb079', // orange
-  4: '#5b8cff', // blue
-  6: '#5fd897', // green
-  8: '#b69bff', // purple
-  12: '#7fdce8', // cyan
+  2: '#f06b85',
+  3: '#ffb079',
+  4: '#5b8cff',
+  6: '#5fd897',
+  8: '#b69bff',
+  12: '#7fdce8',
 };
 
 function colorForDen(den: number): string {
@@ -85,8 +98,7 @@ const ALL_STEPS: readonly StepDescriptor[] = [
     label: 'Quest',
     eyebrow: 'Step 3 of 3 · Quests',
     title: 'Take on three quests',
-    blurb:
-      "Apply what you've learned. Each challenge is a little trickier.",
+    blurb: "Apply what you've learned. Each challenge is a little trickier.",
     goal: 'Complete all three quests',
     goalReady: 'All three quests done!',
   },
@@ -142,13 +154,20 @@ function snapshotRails(rails: readonly Rail[]): BlockStudioState['rails'] {
   }));
 }
 
-function railsFromSnapshot(
-  rails: BlockStudioState['rails'],
-): readonly Rail[] {
+function railsFromSnapshot(rails: BlockStudioState['rails']): readonly Rail[] {
   return rails.map((r) => ({
     id: r.id,
     bars: r.bars.map((b) => ({ ...b })),
   }));
+}
+
+/** Parse a dnd-kit droppable id back into a rail id. We namespace the id
+ *  as `rail:<railId>` to keep it from colliding with bar ids on the same
+ *  DndContext. Returns null when the id is not a rail. */
+function railIdFromDroppableId(id: string | number | null): string | null {
+  if (typeof id !== 'string') return null;
+  if (!id.startsWith('rail:')) return null;
+  return id.slice('rail:'.length);
 }
 
 export type BlockStudioProps = {
@@ -159,13 +178,24 @@ export type BlockStudioProps = {
 };
 
 /**
- * Block Studio — a guided 1-2-3 fraction lesson built on multi-rail Lego
- * brick puzzles. Owns its own drag state and progression; publishes a
- * `BlockStudioState` upward whenever the snapshot changes.
+ * Block Studio — guided 1-2-3 multi-rail fraction puzzle.
  *
- * The component layout is "vertical stack" inside the lesson Cell, with a
- * side-by-side palette/mat row on landscape viewports (≥ 1:1 aspect ratio).
- * Inspector lives below.
+ * Drag-and-drop runs on **@dnd-kit/core**. PointerSensor + TouchSensor with
+ * an 8px activation distance distinguishes tap from drag on both mouse and
+ * touch; the DragOverlay paints the floating ghost so we never juggle a
+ * separate fixed-position element. Insertion index inside a rail is still
+ * computed from the live DOM via `computeInsertIndexFromMidpoints` —
+ * cheaper than wiring every brick as its own droppable, and unchanged from
+ * the pre-dnd-kit implementation.
+ *
+ * The drop pipeline:
+ *   onDragStart  → stash a tiny ActiveDrag snapshot (lets the rail hide
+ *                   the bar being dragged out of it)
+ *   onDragOver   → record `over.id` so the rail card under the pointer
+ *                   lights up
+ *   onDragEnd    → resolve target rail → over-fill check → compute insert
+ *                   index → state update; or, if dropped off any rail,
+ *                   remove the bar (workspace drag only)
  */
 export function BlockStudio({
   config,
@@ -173,7 +203,6 @@ export function BlockStudio({
   onChange,
   disabled = false,
 }: BlockStudioProps) {
-  // Build the step list from the config (filter to authored ids preserving order).
   const steps = useMemo<readonly StepDescriptor[]>(
     () =>
       config.steps
@@ -213,8 +242,8 @@ export function BlockStudio({
     () => value?.completed ?? false,
   );
 
-  const [drag, setDrag] = useState<DragState | null>(null);
-  const [hoverRailId, setHoverRailId] = useState<string | null>(null);
+  const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
+  const [overRailId, setOverRailId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const railsRef = useRef(rails);
@@ -245,8 +274,6 @@ export function BlockStudio({
     return stepCheckCompare(rails);
   }, [currentStep, quests, questIdx, rails]);
 
-  // Quests done within the current run of step 3 — derived purely for the
-  // published state and inspector ticks.
   const questsDoneCount = useMemo(() => {
     if (!isQuestStep) return 0;
     const past = questIdx;
@@ -258,7 +285,6 @@ export function BlockStudio({
     return past + currentDone;
   }, [isQuestStep, questIdx, currentQuest, rails]);
 
-  // Auto-toast when current quest is solved (once per transition).
   const lastQuestKey = useRef<string>('');
   useEffect(() => {
     if (!isQuestStep || !currentQuest) return;
@@ -296,7 +322,6 @@ export function BlockStudio({
       if (idx === stepIdx) return;
       setStepIdx(idx);
       setMaxStepReached((m) => Math.max(m, idx));
-      // Light reset on first time reaching steps 2/3.
       if (idx > maxStepReached) {
         if (steps[idx]?.id === 'compare') {
           setRails(starterRails(3));
@@ -325,7 +350,6 @@ export function BlockStudio({
         });
         return;
       }
-      // All quests done → lesson complete
       setCompleted(true);
       setShowComplete(true);
       return;
@@ -362,7 +386,6 @@ export function BlockStudio({
     [disabled],
   );
 
-  // --- equivalence highlight ---------------------------------------------
   const equivIds = useMemo(() => {
     const groups = findEquivalenceGroups(rails);
     const set = new Set<string>();
@@ -372,221 +395,173 @@ export function BlockStudio({
     return set;
   }, [rails]);
 
-  // --- drag handling -----------------------------------------------------
-  const startDrag = useCallback(
-    (
-      e: ReactPointerEvent<HTMLDivElement>,
-      src:
-        | { readonly source: 'palette'; readonly frac: PaletteFrac }
-        | {
-            readonly source: 'workspace';
-            readonly fromRailId: string;
-            readonly barId: string;
-            readonly frac: PaletteFrac;
-          },
-    ) => {
-      if (disabled) return;
-      e.preventDefault();
-      const r = e.currentTarget.getBoundingClientRect();
-      const base = {
-        x: e.clientX,
-        y: e.clientY,
-        gx: e.clientX - r.left,
-        gy: e.clientY - r.top,
-        w: r.width,
-        h: r.height,
-      };
-      if (src.source === 'palette') {
-        setDrag({ source: 'palette', frac: src.frac, ...base });
-      } else {
-        setDrag({
-          source: 'workspace',
-          fromRailId: src.fromRailId,
-          barId: src.barId,
-          frac: src.frac,
-          ...base,
-        });
-      }
-    },
-    [disabled],
+  // --- drag-and-drop (@dnd-kit) ------------------------------------------
+  // PointerSensor with 8px activation distance — distinguishes a tap from
+  // a drag so the kid can click the brick (e.g. to select / inspect) on
+  // a single tap without ever triggering a drag. TouchSensor mirrors this
+  // with a tolerance instead of a delay so drag-from-rest still feels
+  // snappy on iPad.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 80, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor),
   );
 
-  useEffect(() => {
-    if (!drag) return;
+  const handleDragStart = useCallback((ev: DragStartEvent) => {
+    const data = ev.active.data.current as DragSource | undefined;
+    if (!data) return;
+    setActiveDrag({ source: data });
+    setOverRailId(null);
+  }, []);
 
-    const findHit = (
-      ev: PointerEvent,
-    ): { railId: string; railEl: HTMLElement } | null => {
-      const els = document.querySelectorAll<HTMLElement>('[data-rail-id]');
-      for (const el of Array.from(els)) {
-        const r = el.getBoundingClientRect();
-        if (
-          ev.clientX >= r.left &&
-          ev.clientX <= r.right &&
-          ev.clientY >= r.top - 12 &&
-          ev.clientY <= r.bottom + 12
-        ) {
-          const id = el.getAttribute('data-rail-id');
-          if (id) return { railId: id, railEl: el };
-        }
+  const handleDragOver = useCallback((ev: DragOverEvent) => {
+    setOverRailId(railIdFromDroppableId(ev.over?.id ?? null));
+  }, []);
+
+  const handleDragCancel = useCallback(() => {
+    setActiveDrag(null);
+    setOverRailId(null);
+  }, []);
+
+  const handleDragEnd = useCallback(
+    (ev: DragEndEvent) => {
+      const src = ev.active.data.current as DragSource | undefined;
+      const targetRailId = railIdFromDroppableId(ev.over?.id ?? null);
+      setActiveDrag(null);
+      setOverRailId(null);
+
+      if (!src) return;
+
+      // Source: existing workspace bar dropped off any rail → remove.
+      if (src.source === 'workspace' && !targetRailId) {
+        setRails((rs) =>
+          rs.map((r) =>
+            r.id === src.fromRailId
+              ? { ...r, bars: r.bars.filter((b) => b.id !== src.barId) }
+              : r,
+          ),
+        );
+        return;
       }
-      return null;
-    };
 
-    const onMove = (ev: PointerEvent) => {
-      setDrag((d) => (d ? { ...d, x: ev.clientX, y: ev.clientY } : d));
-      const hit = findHit(ev);
-      setHoverRailId(hit?.railId ?? null);
-    };
+      if (!targetRailId) return;
+      const currentRails = railsRef.current;
+      const target = currentRails.find((r) => r.id === targetRailId);
+      if (!target) return;
 
-    const onUp = (ev: PointerEvent) => {
-      const hit = findHit(ev);
-      const cur = railsRef.current;
+      // Ghost X-center serves as the "pointer" for insertion-by-midpoint.
+      // dnd-kit gives us the translated ghost rect on the active item;
+      // its center is a faithful enough proxy for where the kid let go.
+      const ghostRect = ev.active.rect.current.translated;
+      const ghostCenterX = ghostRect
+        ? ghostRect.left + ghostRect.width / 2
+        : 0;
 
-      if (drag.source === 'palette') {
-        if (hit) {
-          const target = cur.find((r) => r.id === hit.railId);
-          if (target) {
-            const s = fracSum(target.bars);
-            const wouldBe = fracValue(s) + drag.frac.num / drag.frac.den;
-            if (wouldBe > 1 + 1e-9) {
-              setToast({
-                msg: "That brick won't fit — try a smaller one or another rail.",
-                kind: 'info',
-              });
-            } else {
-              const childRects = Array.from(
-                hit.railEl.querySelectorAll<HTMLElement>('[data-bar-id]'),
-              ).map((el) => {
-                const r = el.getBoundingClientRect();
-                return { left: r.left, width: r.width };
-              });
-              const insertAt = computeInsertIndexFromMidpoints(
-                ev.clientX,
-                childRects,
-              );
-              const newBar: FractionBoxBar = {
-                id: newBarId(),
-                num: drag.frac.num,
-                den: drag.frac.den,
-                color: drag.frac.color,
-              };
-              setRails((rs) =>
-                rs.map((r) => {
-                  if (r.id !== hit.railId) return r;
-                  const next = [...r.bars];
-                  next.splice(insertAt, 0, newBar);
-                  return { ...r, bars: next };
-                }),
-              );
-              const willFill =
-                Math.abs(fracValue(s) + drag.frac.num / drag.frac.den - 1) <
-                1e-9;
-              if (willFill) {
-                window.setTimeout(
-                  () =>
-                    setToast({
-                      msg: 'That rail equals 1 whole!',
-                      kind: 'good',
-                    }),
-                  100,
-                );
-              }
-            }
+      if (src.source === 'palette') {
+        const sum = fracSum(target.bars);
+        const wouldBe = fracValue(sum) + src.frac.num / src.frac.den;
+        if (wouldBe > 1 + 1e-9) {
+          setToast({
+            msg: "That brick won't fit — try a smaller one or another rail.",
+            kind: 'info',
+          });
+          return;
+        }
+        const plateEl = document.querySelector<HTMLElement>(
+          `[data-rail-id="${targetRailId}"]`,
+        );
+        const childRects = plateEl
+          ? Array.from(
+              plateEl.querySelectorAll<HTMLElement>('[data-bar-id]'),
+            ).map((el) => {
+              const r = el.getBoundingClientRect();
+              return { left: r.left, width: r.width };
+            })
+          : [];
+        const insertAt = computeInsertIndexFromMidpoints(
+          ghostCenterX,
+          childRects,
+        );
+        const newBar: FractionBoxBar = {
+          id: newBarId(),
+          num: src.frac.num,
+          den: src.frac.den,
+          color: src.frac.color,
+        };
+        setRails((rs) =>
+          rs.map((r) => {
+            if (r.id !== targetRailId) return r;
+            const next = [...r.bars];
+            next.splice(insertAt, 0, newBar);
+            return { ...r, bars: next };
+          }),
+        );
+        const willFill =
+          Math.abs(fracValue(sum) + src.frac.num / src.frac.den - 1) < 1e-9;
+        if (willFill) {
+          window.setTimeout(
+            () =>
+              setToast({ msg: 'That rail equals 1 whole!', kind: 'good' }),
+            100,
+          );
+        }
+        return;
+      }
+
+      // src.source === 'workspace': move (or reorder).
+      const fromRail = currentRails.find((r) => r.id === src.fromRailId);
+      const movingBar = fromRail?.bars.find((b) => b.id === src.barId);
+      if (!movingBar) return;
+
+      const targetBars = target.bars.filter((b) => b.id !== src.barId);
+      const sum = fracSum(targetBars);
+      const wouldBe = fracValue(sum) + movingBar.num / movingBar.den;
+      if (wouldBe > 1 + 1e-9) {
+        setToast({ msg: "Won't fit on that rail.", kind: 'info' });
+        return;
+      }
+      const plateEl = document.querySelector<HTMLElement>(
+        `[data-rail-id="${targetRailId}"]`,
+      );
+      const childRects = plateEl
+        ? Array.from(plateEl.querySelectorAll<HTMLElement>('[data-bar-id]'))
+            .filter((el) => el.getAttribute('data-bar-id') !== src.barId)
+            .map((el) => {
+              const r = el.getBoundingClientRect();
+              return { left: r.left, width: r.width };
+            })
+        : [];
+      const insertAt = computeInsertIndexFromMidpoints(
+        ghostCenterX,
+        childRects,
+      );
+      setRails((rs) =>
+        rs.map((r) => {
+          if (r.id === src.fromRailId && r.id === targetRailId) {
+            const others = r.bars.filter((b) => b.id !== src.barId);
+            const next = [...others];
+            next.splice(insertAt, 0, movingBar);
+            return { ...r, bars: next };
           }
-        }
-      } else {
-        // workspace drag
-        const fromRail = cur.find((r) => r.id === drag.fromRailId);
-        const movingBar = fromRail?.bars.find((b) => b.id === drag.barId);
-        if (movingBar) {
-          if (!hit) {
-            // dropped off any rail → remove
-            setRails((rs) =>
-              rs.map((r) =>
-                r.id === drag.fromRailId
-                  ? { ...r, bars: r.bars.filter((b) => b.id !== drag.barId) }
-                  : r,
-              ),
-            );
-          } else {
-            const targetRail = cur.find((r) => r.id === hit.railId);
-            if (targetRail) {
-              const targetBars = targetRail.bars.filter(
-                (b) => b.id !== drag.barId,
-              );
-              const ts = fracSum(targetBars);
-              const wouldBe = fracValue(ts) + movingBar.num / movingBar.den;
-              if (wouldBe > 1 + 1e-9) {
-                setToast({
-                  msg: "Won't fit on that rail.",
-                  kind: 'info',
-                });
-              } else {
-                const childRects = Array.from(
-                  hit.railEl.querySelectorAll<HTMLElement>('[data-bar-id]'),
-                )
-                  .filter((el) => el.getAttribute('data-bar-id') !== drag.barId)
-                  .map((el) => {
-                    const r = el.getBoundingClientRect();
-                    return { left: r.left, width: r.width };
-                  });
-                const insertAt = computeInsertIndexFromMidpoints(
-                  ev.clientX,
-                  childRects,
-                );
-                setRails((rs) =>
-                  rs.map((r) => {
-                    if (
-                      r.id === drag.fromRailId &&
-                      r.id === hit.railId
-                    ) {
-                      const others = r.bars.filter((b) => b.id !== drag.barId);
-                      const next = [...others];
-                      next.splice(insertAt, 0, movingBar);
-                      return { ...r, bars: next };
-                    }
-                    if (r.id === drag.fromRailId) {
-                      return {
-                        ...r,
-                        bars: r.bars.filter((b) => b.id !== drag.barId),
-                      };
-                    }
-                    if (r.id === hit.railId) {
-                      const next = [...r.bars];
-                      next.splice(insertAt, 0, movingBar);
-                      return { ...r, bars: next };
-                    }
-                    return r;
-                  }),
-                );
-              }
-            }
+          if (r.id === src.fromRailId) {
+            return {
+              ...r,
+              bars: r.bars.filter((b) => b.id !== src.barId),
+            };
           }
-        }
-      }
-      setDrag(null);
-      setHoverRailId(null);
-    };
-
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') {
-        setDrag(null);
-        setHoverRailId(null);
-      }
-    };
-
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [drag]);
+          if (r.id === targetRailId) {
+            const next = [...r.bars];
+            next.splice(insertAt, 0, movingBar);
+            return { ...r, bars: next };
+          }
+          return r;
+        }),
+      );
+    },
+    [],
+  );
 
   // --- intro card values -------------------------------------------------
   const currentQuestDone = currentQuest
@@ -633,13 +608,11 @@ export function BlockStudio({
     flexWrap: 'wrap',
     marginBottom: 14,
   };
-
   const actions: CSSProperties = {
     display: 'flex',
     gap: 8,
     alignItems: 'center',
   };
-
   const ghostBtn: CSSProperties = {
     padding: '8px 14px',
     background: 'transparent',
@@ -653,7 +626,6 @@ export function BlockStudio({
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.5 : 1,
   };
-
   const nextBtnStyle: CSSProperties = {
     padding: '9px 16px',
     border: stepReady
@@ -674,7 +646,6 @@ export function BlockStudio({
       ? 'blockStudioNextPulse 1.6s ease-in-out infinite'
       : 'none',
   };
-
   const addRailStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -693,218 +664,212 @@ export function BlockStudio({
     opacity: disabled ? 0.5 : 1,
   };
 
+  // --- render ------------------------------------------------------------
   return (
-    <div
-      className="block-studio-root"
-      style={{
-        width: '100%',
-        maxWidth: 1080,
-        margin: '0 auto',
-        userSelect: drag ? 'none' : 'auto',
-        touchAction: 'none',
-      }}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
-      <div style={topBar}>
-        <BlockStudioStepper
-          steps={steps}
-          stepIdx={stepIdx}
-          maxStepReached={maxStepReached}
-          stepReady={stepReady}
-          onSelect={goToStep}
-        />
-        <div style={actions}>
-          <button
-            type="button"
-            onClick={clearMat}
-            disabled={disabled}
-            style={ghostBtn}
-          >
-            Clear mat
-          </button>
-          <button
-            type="button"
-            onClick={advance}
-            disabled={!stepReady || disabled}
-            style={nextBtnStyle}
-            title={stepReady ? 'Continue' : 'Finish this step first'}
-          >
-            {stepReady && isLastQuest && (
+      <div
+        className="block-studio-root"
+        style={{
+          width: '100%',
+          maxWidth: 1080,
+          margin: '0 auto',
+        }}
+      >
+        <div style={topBar}>
+          <BlockStudioStepper
+            steps={steps}
+            stepIdx={stepIdx}
+            maxStepReached={maxStepReached}
+            stepReady={stepReady}
+            onSelect={goToStep}
+          />
+          <div style={actions}>
+            <button
+              type="button"
+              onClick={clearMat}
+              disabled={disabled}
+              style={ghostBtn}
+            >
+              Clear mat
+            </button>
+            <button
+              type="button"
+              onClick={advance}
+              disabled={!stepReady || disabled}
+              style={nextBtnStyle}
+              title={stepReady ? 'Continue' : 'Finish this step first'}
+            >
+              {stepReady && isLastQuest && (
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M2 7.5L5.5 11L12 3.5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+              {nextLabel}
+            </button>
+          </div>
+        </div>
+
+        <div className="block-studio-grid">
+          <div className="block-studio-palette-col">
+            <BlockStudioPalette palette={palette} disabled={disabled} />
+          </div>
+
+          <div className="block-studio-mat-col">
+            {currentStep && (
+              <BlockStudioStepIntro
+                mountKey={`step-${stepIdx}-${questIdx}`}
+                eyebrow={introEyebrow}
+                num={introNum}
+                title={introTitle}
+                blurb={introBlurb}
+                goalText={goalText}
+                ready={introReady}
+              />
+            )}
+
+            {rails.map((r, i) => (
+              <BlockStudioRail
+                key={r.id}
+                rail={r}
+                index={i}
+                activeDrag={activeDrag}
+                hoverRailId={overRailId}
+                isEquivWithOther={equivIds.has(r.id)}
+                canRemove={rails.length > 1}
+                disabled={disabled}
+                onRemoveRail={removeRail}
+              />
+            ))}
+
+            <button type="button" onClick={addRail} style={addRailStyle}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path
-                  d="M2 7.5L5.5 11L12 3.5"
+                  d="M7 2V12M2 7H12"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="1.8"
                   strokeLinecap="round"
-                  strokeLinejoin="round"
                 />
               </svg>
-            )}
-            {nextLabel}
-          </button>
-        </div>
-      </div>
+              Add another rail
+            </button>
+          </div>
 
-      <div className="block-studio-grid">
-        <div className="block-studio-palette-col">
-          <BlockStudioPalette
-            palette={palette}
-            disabled={disabled}
-            onStartDrag={(e, frac) =>
-              startDrag(e, { source: 'palette', frac })
-            }
-          />
-        </div>
-
-        <div className="block-studio-mat-col">
-          {currentStep && (
-            <BlockStudioStepIntro
-              mountKey={`step-${stepIdx}-${questIdx}`}
-              eyebrow={introEyebrow}
-              num={introNum}
-              title={introTitle}
-              blurb={introBlurb}
-              goalText={goalText}
-              ready={introReady}
-            />
-          )}
-
-          {rails.map((r, i) => (
-            <BlockStudioRail
-              key={r.id}
-              rail={r}
-              index={i}
-              drag={drag}
-              hoverRailId={hoverRailId}
-              isEquivWithOther={equivIds.has(r.id)}
-              canRemove={rails.length > 1}
-              disabled={disabled}
-              onPointerDownBrick={(e, railId, bar) =>
-                startDrag(e, {
-                  source: 'workspace',
-                  fromRailId: railId,
-                  barId: bar.id,
-                  frac: { num: bar.num, den: bar.den, color: bar.color },
-                })
-              }
-              onRemoveRail={removeRail}
-            />
-          ))}
-
-          <button type="button" onClick={addRail} style={addRailStyle}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M7 2V12M2 7H12"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
+          <div className="block-studio-inspector-col">
+            {currentStep && (
+              <BlockStudioInspector
+                rails={rails}
+                stepId={currentStep.id as BlockStudioStepId}
+                questIdx={questIdx}
+                questsTotal={quests.length}
+                currentQuest={currentQuest}
               />
-            </svg>
-            Add another rail
-          </button>
+            )}
+          </div>
         </div>
 
-        <div className="block-studio-inspector-col">
-          {currentStep && (
-            <BlockStudioInspector
-              rails={rails}
-              stepId={currentStep.id as BlockStudioStepId}
-              questIdx={questIdx}
-              questsTotal={quests.length}
-              currentQuest={currentQuest}
-            />
-          )}
-        </div>
+        {toast && <BlockStudioToast toast={toast} />}
+
+        {showComplete && (
+          <BlockStudioCelebration
+            onReplay={restartLesson}
+            onClose={() => setShowComplete(false)}
+          />
+        )}
+
+        <style>{`
+          .block-studio-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+          }
+          .block-studio-palette-col {
+            padding: 16px 18px;
+            background: rgba(255,255,255,0.025);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+          }
+          .block-studio-mat-col {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+          }
+          .block-studio-inspector-col {
+            padding: 16px 18px;
+            background: rgba(255,255,255,0.025);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+          }
+          @media (min-aspect-ratio: 1/1) and (min-width: 900px) {
+            .block-studio-grid {
+              display: grid;
+              grid-template-columns: 220px 1fr 280px;
+              align-items: flex-start;
+              gap: 22px;
+            }
+          }
+          @keyframes blockStudioStepIn {
+            from { transform: translateY(-8px); opacity: 0; }
+            to   { transform: translateY(0); opacity: 1; }
+          }
+          @keyframes brickIn {
+            from { transform: translateY(-10px) scale(0.92); opacity: 0; }
+            to   { transform: translateY(0) scale(1); opacity: 1; }
+          }
+          @keyframes blockStudioNextPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(95,216,151,0.35); }
+            50% { box-shadow: 0 0 0 6px rgba(95,216,151,0); }
+          }
+          @keyframes blockStudioToastIn {
+            from { transform: translateY(8px); opacity: 0; }
+            to   { transform: translateY(0); opacity: 1; }
+          }
+          @keyframes blockStudioCompletePop {
+            from { transform: translate(-50%, -42%) scale(0.86); opacity: 0; }
+            to   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+          }
+          @keyframes blockStudioConfettiFall {
+            0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+            10%  { opacity: 0.95; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0.1; }
+          }
+        `}</style>
       </div>
 
-      {drag && (
-        <div
-          style={{
-            position: 'fixed',
-            left: drag.x - drag.gx,
-            top: drag.y - drag.gy,
-            width: drag.w,
-            height: drag.h,
-            pointerEvents: 'none',
-            zIndex: 1000,
-            transform: 'scale(1.04) rotate(-2deg)',
-            transformOrigin: 'center center',
-            filter: 'drop-shadow(0 18px 28px rgba(0,0,0,0.55))',
-          }}
-        >
-          <DragGhostBrick
-            num={drag.frac.num}
-            den={drag.frac.den}
-            color={drag.frac.color}
-          />
-        </div>
-      )}
-
-      {toast && <BlockStudioToast toast={toast} />}
-
-      {showComplete && (
-        <BlockStudioCelebration
-          onReplay={restartLesson}
-          onClose={() => setShowComplete(false)}
-        />
-      )}
-
-      <style>{`
-        .block-studio-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 18px;
-        }
-        .block-studio-palette-col {
-          padding: 16px 18px;
-          background: rgba(255,255,255,0.025);
-          border: 1px solid var(--line);
-          border-radius: 16px;
-        }
-        .block-studio-mat-col {
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
-        }
-        .block-studio-inspector-col {
-          padding: 16px 18px;
-          background: rgba(255,255,255,0.025);
-          border: 1px solid var(--line);
-          border-radius: 16px;
-        }
-        @media (min-aspect-ratio: 1/1) and (min-width: 900px) {
-          .block-studio-grid {
-            display: grid;
-            grid-template-columns: 220px 1fr 280px;
-            align-items: flex-start;
-            gap: 22px;
-          }
-        }
-        @keyframes blockStudioStepIn {
-          from { transform: translateY(-8px); opacity: 0; }
-          to   { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes brickIn {
-          from { transform: translateY(-10px) scale(0.92); opacity: 0; }
-          to   { transform: translateY(0) scale(1); opacity: 1; }
-        }
-        @keyframes blockStudioNextPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(95,216,151,0.35); }
-          50% { box-shadow: 0 0 0 6px rgba(95,216,151,0); }
-        }
-        @keyframes blockStudioToastIn {
-          from { transform: translateY(8px); opacity: 0; }
-          to   { transform: translateY(0); opacity: 1; }
-        }
-        @keyframes blockStudioCompletePop {
-          from { transform: translate(-50%, -42%) scale(0.86); opacity: 0; }
-          to   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-        }
-        @keyframes blockStudioConfettiFall {
-          0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
-          10%  { opacity: 0.95; }
-          100% { transform: translateY(100vh) rotate(720deg); opacity: 0.1; }
-        }
-      `}</style>
-    </div>
+      {/* Floating ghost — replaces the old hand-rolled fixed-position div.
+          dnd-kit positions and translates this for us via the active
+          drag's coords; we only describe what it looks like. The slight
+          scale + rotate keeps the "physical pick-up" feel from before. */}
+      <DragOverlay dropAnimation={null}>
+        {activeDrag ? (
+          <div
+            style={{
+              transform: 'scale(1.04) rotate(-2deg)',
+              transformOrigin: 'center center',
+              filter: 'drop-shadow(0 18px 28px rgba(0,0,0,0.55))',
+              pointerEvents: 'none',
+            }}
+          >
+            <DragGhostBrick
+              num={activeDrag.source.frac.num}
+              den={activeDrag.source.frac.den}
+              color={activeDrag.source.frac.color}
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

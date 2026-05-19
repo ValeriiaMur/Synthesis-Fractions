@@ -1,25 +1,26 @@
 'use client';
 
-import { useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
+import { useMemo, type CSSProperties } from 'react';
 import { fracSum, fracValue, isOne } from '@/lib/lesson/fractions';
 import type { FractionBoxBar } from '@/lib/lesson/types';
 import { LegoBrick } from '../LegoBrick';
 import { FracInline } from '../FracInline';
-import type { DragState, Rail } from './types';
+import type { ActiveDrag, DragSourceWorkspace, Rail } from './types';
 
 export type BlockStudioRailProps = {
   readonly rail: Rail;
   readonly index: number;
-  readonly drag: DragState | null;
+  /** Snapshot of the active drag so the rail can hide the bar currently
+   *  being dragged out of it (and color its border when something is
+   *  being dragged over). Null when no drag is in progress. */
+  readonly activeDrag: ActiveDrag | null;
+  /** dnd-kit's `over` id — when this rail is the drop target, we light
+   *  up the border + show the "release to drop" caption. */
   readonly hoverRailId: string | null;
   readonly isEquivWithOther: boolean;
   readonly canRemove: boolean;
   readonly disabled: boolean;
-  readonly onPointerDownBrick: (
-    e: ReactPointerEvent<HTMLDivElement>,
-    railId: string,
-    bar: FractionBoxBar,
-  ) => void;
   readonly onRemoveRail: (railId: string) => void;
 };
 
@@ -43,7 +44,11 @@ function statusStyle(isFull: boolean, isOver: boolean): CSSProperties {
     fontFamily: 'var(--font-jetbrains-mono), JetBrains Mono, monospace',
     fontSize: 10.5,
     letterSpacing: '0.04em',
-    color: isFull ? 'var(--green)' : isOver ? 'var(--orange)' : 'var(--ink-faint)',
+    color: isFull
+      ? 'var(--green)'
+      : isOver
+        ? 'var(--orange)'
+        : 'var(--ink-faint)',
     marginLeft: 12,
   };
 }
@@ -110,20 +115,85 @@ const barTrack: CSSProperties = {
   flexShrink: 0,
 };
 
+/** Per-brick draggable wrapper — kept inside this file because it's only
+ *  used by the rail and stays tightly coupled to the brick visual layout. */
+function RailBrickDraggable({
+  bar,
+  railId,
+  color,
+  widthPct,
+  disabled,
+}: {
+  readonly bar: FractionBoxBar;
+  readonly railId: string;
+  readonly color: string;
+  readonly widthPct: number;
+  readonly disabled: boolean;
+}) {
+  const data: DragSourceWorkspace = {
+    source: 'workspace',
+    fromRailId: railId,
+    barId: bar.id,
+    frac: { num: bar.num, den: bar.den, color },
+  };
+  const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
+    id: `bar:${bar.id}`,
+    data,
+    disabled,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      data-bar-id={bar.id}
+      style={{
+        position: 'relative',
+        width: `${widthPct}%`,
+        // Match the visual brick height so the parent flex doesn't shrink.
+        height: 58,
+        // Hide while being dragged — DragOverlay paints the ghost.
+        opacity: isDragging ? 0 : 1,
+        touchAction: 'none',
+      }}
+    >
+      <LegoBrick
+        num={bar.num}
+        den={bar.den}
+        color={color}
+        widthPct={100}
+        dataBarId={bar.id}
+        animateIn
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+/**
+ * A single "one whole" rail. Its plate is a @dnd-kit droppable; each brick
+ * inside is its own draggable. Layout, tick markers, sum readout, and
+ * fill-meter are unchanged from the original implementation.
+ */
 export function BlockStudioRail({
   rail,
   index,
-  drag,
+  activeDrag,
   hoverRailId,
   isEquivWithOther,
   canRemove,
   disabled,
-  onPointerDownBrick,
   onRemoveRail,
 }: BlockStudioRailProps) {
+  // Hide a bar that is currently being dragged out of THIS rail so the
+  // remaining bricks reflow naturally (the ghost paints in its place).
+  // Pull the source out into a local so TS narrows it to the workspace
+  // variant before we read `barId`/`fromRailId`.
+  const dragSource = activeDrag?.source ?? null;
   const visibleBars =
-    drag?.source === 'workspace' && drag.fromRailId === rail.id
-      ? rail.bars.filter((b) => b.id !== drag.barId)
+    dragSource?.source === 'workspace' && dragSource.fromRailId === rail.id
+      ? rail.bars.filter((b) => b.id !== dragSource.barId)
       : rail.bars;
 
   const s = useMemo(() => fracSum(visibleBars), [visibleBars]);
@@ -133,8 +203,15 @@ export function BlockStudioRail({
   const fillW = Math.max(0, Math.min(1, sumV)) * 100;
 
   const isHover = hoverRailId === rail.id;
+  const isDragInProgress = activeDrag !== null;
 
-  // Card border / glow shifts subtly based on hover / full / equivalence
+  // Register the plate as a droppable. The id is namespaced so onDragEnd
+  // can route 'rail:<railId>' targets without colliding with bar ids.
+  const { setNodeRef } = useDroppable({
+    id: `rail:${rail.id}`,
+    data: { railId: rail.id },
+  });
+
   const cardStyle: CSSProperties = {
     position: 'relative',
     padding: '16px 18px 18px',
@@ -183,7 +260,9 @@ export function BlockStudioRail({
               <>{Math.round(sumV * 100)}% of 1</>
             )}
             {full && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
                 <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
                   <path
                     d="M2 5.8L4.4 8.2L9 3.2"
@@ -220,9 +299,10 @@ export function BlockStudioRail({
         )}
       </div>
 
-      {/* The plate — drop target */}
-      <div data-rail-id={rail.id} style={plate}>
-        {/* tick markers (1/2 darker, 1/4 and 3/4 subtle) */}
+      {/* The plate — droppable target. The ref + data-rail-id let
+          BlockStudio's onDragEnd both (a) accept the drop and
+          (b) measure child rects for the insertion-by-midpoint logic. */}
+      <div ref={setNodeRef} data-rail-id={rail.id} style={plate}>
         <div
           aria-hidden
           style={{
@@ -259,24 +339,21 @@ export function BlockStudioRail({
 
         <div style={plateRow}>
           {visibleBars.map((b) => (
-            <LegoBrick
+            <RailBrickDraggable
               key={b.id}
-              num={b.num}
-              den={b.den}
+              bar={b}
+              railId={rail.id}
               color={b.color}
               widthPct={(b.num / b.den) * 100}
-              dataBarId={b.id}
-              animateIn
               disabled={disabled}
-              onPointerDown={(e) => onPointerDownBrick(e, rail.id, b)}
             />
           ))}
         </div>
 
-        {visibleBars.length === 0 && !drag && (
+        {visibleBars.length === 0 && !isDragInProgress && (
           <div style={plateEmpty}>drop a brick here</div>
         )}
-        {visibleBars.length === 0 && drag && isHover && (
+        {visibleBars.length === 0 && isDragInProgress && isHover && (
           <div style={{ ...plateEmpty, color: 'var(--blue)' }}>
             release to drop
           </div>
@@ -292,7 +369,11 @@ export function BlockStudioRail({
               {visibleBars.map((b, i) => (
                 <span
                   key={b.id}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
                 >
                   {i > 0 && <span style={{ color: 'var(--ink-mute)' }}>+</span>}
                   <span style={{ color: b.color, fontWeight: 500 }}>
@@ -326,7 +407,8 @@ export function BlockStudioRail({
                 : over
                   ? 'var(--orange)'
                   : 'var(--blue)',
-              transition: 'width .35s cubic-bezier(.4,1.3,.55,1), background .2s',
+              transition:
+                'width .35s cubic-bezier(.4,1.3,.55,1), background .2s',
             }}
           />
         </div>

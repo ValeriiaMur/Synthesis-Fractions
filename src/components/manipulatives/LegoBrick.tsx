@@ -12,7 +12,9 @@ export type LegoBrickProps = {
   /** Width of the brick as a percent of its parent. */
   readonly widthPct: number;
   readonly dataBarId: string;
-  readonly onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  /** Optional — when omitted (the dnd-kit path in BlockStudio) the brick is
+   *  purely visual and its parent wrapper owns drag activation. */
+  readonly onPointerDown?: (e: ReactPointerEvent<HTMLDivElement>) => void;
   readonly disabled?: boolean;
   readonly animateIn?: boolean;
 };

@@ -15,29 +15,32 @@ export type PaletteFrac = {
   readonly color: string;
 };
 
-export type DragState =
-  | {
-      readonly source: 'palette';
-      readonly frac: PaletteFrac;
-      x: number;
-      y: number;
-      readonly gx: number;
-      readonly gy: number;
-      readonly w: number;
-      readonly h: number;
-    }
-  | {
-      readonly source: 'workspace';
-      readonly fromRailId: string;
-      readonly barId: string;
-      readonly frac: PaletteFrac;
-      x: number;
-      y: number;
-      readonly gx: number;
-      readonly gy: number;
-      readonly w: number;
-      readonly h: number;
-    };
+/**
+ * Drag-source payload attached to each draggable via `data` on useDraggable.
+ * dnd-kit gives us this back in onDragEnd via `active.data.current`.
+ */
+export type DragSourcePalette = {
+  readonly source: 'palette';
+  readonly frac: PaletteFrac;
+};
+
+export type DragSourceWorkspace = {
+  readonly source: 'workspace';
+  readonly fromRailId: string;
+  readonly barId: string;
+  readonly frac: PaletteFrac;
+};
+
+export type DragSource = DragSourcePalette | DragSourceWorkspace;
+
+/**
+ * Tiny snapshot of the currently-active drag, kept in BlockStudio state so
+ * subcomponents (the rail in particular) can hide a brick that's being
+ * dragged out of it. Cleared on drag-end / drag-cancel.
+ */
+export type ActiveDrag = {
+  readonly source: DragSource;
+};
 
 export type ToastKind = 'good' | 'info';
 

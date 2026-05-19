@@ -10,7 +10,9 @@ export type PaletteBrickProps = {
   readonly den: number;
   readonly color: string;
   readonly disabled?: boolean;
-  readonly onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  /** Optional — when omitted (the dnd-kit path in BlockStudio) the brick is
+   *  purely visual and its parent wrapper owns drag activation. */
+  readonly onPointerDown?: (e: ReactPointerEvent<HTMLDivElement>) => void;
 };
 
 /**
