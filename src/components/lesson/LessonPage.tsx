@@ -83,11 +83,6 @@ export function LessonPage({
       <div className="stage">
         <div className="notebook">
           <div className="notebook-inner">
-            <LessonTrail
-              total={beatCount}
-              allDone={machine.doneSet.size === beatCount}
-            />
-
             {beats.map((beat: Beat, idx: number) => (
               <LessonBeatCell
                 key={beat.id}
@@ -100,6 +95,8 @@ export function LessonPage({
                 onManipChange={(s) => machine.handleManip(idx, s)}
               />
             ))}
+
+            <LessonTrail allDone={machine.doneSet.size === beatCount} />
 
             <Outro done={machine.doneSet.size === beatCount} />
           </div>
