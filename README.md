@@ -10,6 +10,7 @@ viewers through the Montessori principles behind the design.
   principles, with small interactive demos.
 
 <img width="2064" height="2752" alt="Simulator Screenshot - iPad Pro 13-inch (M5) - 2026-05-20 at 09 25 43" src="https://github.com/user-attachments/assets/2f263753-c81b-445d-8707-214ac4db07d3" />
+<img width="2064" height="2752" alt="Simulator Screenshot - iPad Pro 13-inch (M5) - 2026-05-20 at 10 57 02" src="https://github.com/user-attachments/assets/5af9cac1-ce6b-4c9c-a43b-157f515a35d6" />
 
 ## What it is
 
