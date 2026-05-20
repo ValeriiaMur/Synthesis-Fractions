@@ -9,7 +9,7 @@ viewers through the Montessori principles behind the design.
 - **Companion route:** `/` — full-bleed scrollytelling on the Montessori
   principles, with small interactive demos.
 
-<img width="900" height="910" alt="Screenshot 2026-05-19 at 4 31 16 PM" src="https://github.com/user-attachments/assets/b5adbdc7-55af-4783-b4c9-e4a8affa124d" />
+<img width="2064" height="2752" alt="Simulator Screenshot - iPad Pro 13-inch (M5) - 2026-05-20 at 09 25 43" src="https://github.com/user-attachments/assets/2f263753-c81b-445d-8707-214ac4db07d3" />
 
 ## What it is
 
