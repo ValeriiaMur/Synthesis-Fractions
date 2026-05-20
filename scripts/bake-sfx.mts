@@ -34,6 +34,20 @@ const SFX: readonly SfxDef[] = [
     duration_seconds: 1.0,
     prompt_influence: 0.6,
   },
+  {
+    file: 'whole-split.mp3',
+    prompt:
+      'chocolate bar splitting cleanly in two, single crisp snap with a soft separating crack, dry close-mic foley, no reverb, warm low-mid frequencies, brief, satisfying, ASMR-quality',
+    duration_seconds: 0.6,
+    prompt_influence: 0.6,
+  },
+  {
+    file: 'hammer-break.mp3',
+    prompt:
+      'small wooden mallet tapping a chocolate bar so it breaks into pieces, single soft thock then a light shatter of small pieces, dry close-mic foley, no reverb, playful, brief, ASMR-quality, no harsh high-end',
+    duration_seconds: 0.8,
+    prompt_influence: 0.6,
+  },
 ];
 
 async function generate(def: SfxDef, apiKey: string): Promise<Uint8Array> {

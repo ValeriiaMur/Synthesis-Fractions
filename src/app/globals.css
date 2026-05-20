@@ -726,27 +726,12 @@ a,
   width: 0;
   height: 0;
 }
-.lesson-trail-flag-pin {
-  position: absolute;
-  left: -7px;
-  bottom: -2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: var(--ink-faint);
-  transition: background 0.5s ease, box-shadow 0.5s ease;
-}
-.lesson-trail.is-done .lesson-trail-flag-pin {
-  background: var(--red);
-  box-shadow: 0 0 0 4px rgba(240, 107, 133, 0.16);
-}
 .lesson-trail-flag-pole {
   position: absolute;
   left: 0;
-  bottom: 10px;
+  bottom: 0;
   width: 2px;
-  height: 26px;
+  height: 30px;
   background: var(--ink-faint);
   transition: background 0.5s ease;
 }
@@ -756,12 +741,12 @@ a,
 .lesson-trail-flag-cloth {
   position: absolute;
   left: 2px;
-  bottom: 24px;
+  bottom: 16px;
   width: 0;
   height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 13px solid var(--ink-faint);
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 14px solid var(--ink-faint);
   transition: border-left-color 0.5s ease, transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .lesson-trail.is-done .lesson-trail-flag-cloth {
@@ -1245,6 +1230,62 @@ a,
   gap: 8px;
 }
 
+/* ----------- recall ("what is this?") ----------- */
+.recall-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 8px 0 4px;
+}
+.recall-prompt {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.recall-piece {
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.recall-piece.is-revealed {
+  transform: translateY(-10px);
+}
+.recall-btn {
+  background: var(--blue);
+  color: #fff;
+  border: 0;
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 400;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, background 0.2s ease;
+}
+@media (hover: hover) {
+  .recall-btn:hover {
+    background: #6f9aff;
+  }
+}
+.recall-btn:active {
+  transform: scale(0.97);
+}
+.recall-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+.recall-answer {
+  min-height: 22px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--green);
+}
+
 /* ----------- equivalence (build the whole + hammer-break, L5) ----------- */
 
 .equivalence-material {
@@ -1340,21 +1381,35 @@ a,
   border-radius: 14px;
   color: var(--ink);
   cursor: grab;
+  /* `touch-action: none` lets the PointerSensor own the touch gesture so a
+     drag on the hammer never scrolls the page. */
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  /* NB: no `transform` in the transition — dnd-kit drives the live drag
+     position via an inline translate3d, and animating it would lag the
+     finger. The drag "lift" below is box-shadow/brightness only. */
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  will-change: transform;
 }
 @media (hover: hover) {
   .equivalence-hammer:hover:not(:disabled) {
     border-color: var(--blue);
     color: var(--blue);
-    transform: scale(1.04) rotate(-6deg);
   }
 }
 .equivalence-hammer:active:not(:disabled) {
   cursor: grabbing;
+}
+/* While dragging — a lift that doesn't touch `transform` (which dnd-kit
+   owns): brighter, blue-edged, lifted shadow. */
+.equivalence-hammer.is-dragging {
+  cursor: grabbing;
+  border-color: var(--blue);
+  color: var(--blue);
+  filter: brightness(1.08);
+  box-shadow: 0 18px 32px -10px rgba(0, 0, 0, 0.6);
 }
 .equivalence-hammer:focus-visible {
   outline: 2px solid var(--blue);
@@ -1363,18 +1418,6 @@ a,
 .equivalence-hammer:disabled {
   opacity: 0.45;
   cursor: default;
-}
-/* Drag ghost — follows the cursor while dragging. Sits above
-   everything (z-index: 1000 on the inline style). */
-.equivalence-hammer-ghost {
-  display: grid;
-  place-items: center;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
-  border: 1.5px solid var(--blue);
-  border-radius: 14px;
-  color: var(--blue);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.55);
-  transform: rotate(-12deg) scale(1.06);
 }
 
 /* Pile buttons are transparent shells — the chocolate image inside each is

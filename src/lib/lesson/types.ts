@@ -3,6 +3,7 @@ export type BeatId =
   | 'name_half'
   | 'name_quarter'
   | 'mix_half_quarter'
+  | 'recall_name'
   | 'equiv_half_two_quarters'
   | 'equiv_paper_check';
 
@@ -34,11 +35,20 @@ export type PaperConfig = {
   readonly targetFolds: readonly ('horizontal' | 'vertical')[];
 };
 
+/** Period-3 recall ("what is this?"). The kid sees one piece, says its name
+ *  aloud, then reveals the tutor's confirmation. No speech capture — the
+ *  saying-aloud is the recall; the reveal is the affirmation. */
+export type RecallConfig = {
+  readonly kind: 'recall';
+  readonly fraction: 'half' | 'quarter';
+};
+
 export type ManipulativeConfig =
   | WholeConfig
   | NamingConfig
   | EquivalenceConfig
-  | PaperConfig;
+  | PaperConfig
+  | RecallConfig;
 
 export type WholeState = { readonly kind: 'whole'; readonly split: boolean };
 /** Naming state tracks the *unique* region indices the kid has tapped on
@@ -56,11 +66,13 @@ export type PaperState = {
   readonly kind: 'paper';
   readonly folds: readonly ('horizontal' | 'vertical')[];
 };
+export type RecallState = { readonly kind: 'recall'; readonly revealed: boolean };
 export type ManipulativeState =
   | WholeState
   | NamingState
   | EquivalenceState
-  | PaperState;
+  | PaperState
+  | RecallState;
 
 export type Beat = {
   readonly id: BeatId;

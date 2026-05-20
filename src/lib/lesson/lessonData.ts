@@ -1,18 +1,21 @@
 import type { Lesson } from './types';
 
 /**
- * Six short naming-first lessons on halves and quarters.
+ * Seven short naming-first lessons on halves and quarters.
  *
  *   00  whole_intro                what is one whole (tap to split in half)
  *   01  name_half                  what is one half
  *   02  name_quarter               what is one quarter
  *   03  mix_half_quarter           halves and quarters together
- *   04  equiv_half_two_quarters    one whole = four quarters (build the whole + hammer-break it)
- *   05  equiv_paper_check          transfer check            (paper-fold)
+ *   04  recall_name                Period-3 recall — "what is this?" (say it aloud)
+ *   05  equiv_half_two_quarters    one whole = four quarters (build the whole + hammer-break it)
+ *   06  equiv_paper_check          transfer check            (paper-fold)
  *
- * Each beat is one concept. No story arc, no characters. Beats 0–4 use the
+ * Each beat is one concept. No story arc, no characters. Beats 0–5 use the
  * chocolate bar as the single material (continuity across whole → naming →
- * equivalence). Beat 5 is a Period-3 *transfer* check: prove the same
+ * recall → equivalence). The recall beat is the canonical Montessori third
+ * period: the kid says the name aloud, then reveals the confirmation — no
+ * speech capture. Beat 6 is a Period-3 *transfer* check: prove the same
  * equivalence in a new representation by folding a square of paper twice.
  * See montessori-plan.md.
  */
@@ -46,6 +49,13 @@ export const lesson: Lesson = {
       kindLabel: 'halves and quarters',
       prose: 'Tap the half. Then tap each quarter.',
       manipulative: { kind: 'naming', fractions: ['half', 'quarter'] },
+    },
+    {
+      id: 'recall_name',
+      phase: 'period_3_recall',
+      kindLabel: 'what is this?',
+      prose: 'What is this? Say it out loud — then show me.',
+      manipulative: { kind: 'recall', fraction: 'half' },
     },
     {
       id: 'equiv_half_two_quarters',

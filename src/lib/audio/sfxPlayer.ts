@@ -7,11 +7,17 @@
 
 import { getVoicePlayer } from '@/lib/voice/voicePlayer';
 
-export type SfxKey = 'chocolateSnap' | 'paperFold';
+export type SfxKey =
+  | 'chocolateSnap'
+  | 'paperFold'
+  | 'wholeSplit'
+  | 'hammerBreak';
 
 export const SFX_SRC: Readonly<Record<SfxKey, string>> = {
   chocolateSnap: '/audio/sfx/chocolate-snap.mp3',
   paperFold: '/audio/sfx/paper-fold.mp3',
+  wholeSplit: '/audio/sfx/whole-split.mp3',
+  hammerBreak: '/audio/sfx/hammer-break.mp3',
 };
 
 type MinimalAudio = {
@@ -26,13 +32,13 @@ export type SfxPlayer = {
 
 export type SfxPlayerDeps = {
   readonly isMuted: () => boolean;
-  /** 0..1, default 0.3 — quiet enough to sit under Ari's voice. */
+  /** 0..1, default 0.55 — present and tactile, still under the voice. */
   readonly volume?: number;
   readonly createAudio: (src: string) => MinimalAudio;
 };
 
 export function createSfxPlayer(deps: SfxPlayerDeps): SfxPlayer {
-  const volume = deps.volume ?? 0.3;
+  const volume = deps.volume ?? 0.55;
   return {
     play: (key) => {
       if (deps.isMuted()) return;

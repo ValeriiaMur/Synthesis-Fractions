@@ -1,132 +1,120 @@
-# PLAN — Synthesis Tutor Clone (1-Week Sprint)
+# PLAN — Synthesis Tutor (as-built + deferred)
 
-Living roadmap. Future agents should read this to understand the full intended scope
-and where the current build sits within it. Update phase status as we go;
-do not turn this into a changelog (use git for that).
+Living scope doc. The original Phase 1 → Phase 2 → Phase 3 roadmap
+(LangGraph agent + Haiku narrator + LangSmith eval) was abandoned
+mid-sprint after a pedagogy review re-anchored the product on Montessori
+principles: cognitive coherence, control of error, three-period naming
+before equivalence. The pivot is documented in
+[`montessori-plan.md`](montessori-plan.md); the as-built architecture is
+in [`summary.md`](summary.md). This file just captures *what shipped*
+and *what was deliberately left out*, so a future agent doesn't try to
+re-implement abandoned scope.
 
-Authoritative pedagogy + product context: [synthesis_tutor_presearch.md](synthesis_tutor_presearch.md).
-Architecture-as-built: [summary.md](summary.md). Project rules: [CLAUDE.md](CLAUDE.md).
+## North star (current)
 
-## North Star
+A scrollytelling lesson on **half / quarter naming + the equivalence
+`½ = ²⁄₄` / `whole = 4 quarters`** that feels like a calm picture book
+on an iPad. Three Montessori "periods" (introduce → recognize → recall),
+plus a transfer check.
 
-A scrollytelling lesson on **fraction equivalence (1/2 = 2/4)** that feels like
-a Jupyter notebook crossed with a calm picture-book. Five beats, three different
-Montessori-style manipulatives in order:
+## Shipped
 
-1. `chocolate_intro` — break a 4-piece chocolate bar; observe 2 quarters cover 1 half.
-2. `chocolate_check` — MC: "How many quarter-pieces make one half?"
-3. `pizza_explore` — drag a knife; see slices and toppings re-anchor equivalence.
-4. `pizza_check` — MC: "Is 2/4 the same amount of pizza as 1/2?"
-5. `paper_fold_final` — fold a square in half, then fold again; overlay proves 1/2 = 2/4. Final MC.
+- **Seven scripted beats** in
+  [`lessonData.ts`](src/lib/lesson/lessonData.ts):
+  1. `whole_intro` — tap a whole bar; it splits in half (P1).
+  2. `name_half` — tap each half (P1).
+  3. `name_quarter` — tap each quarter (P1).
+  4. `mix_half_quarter` — tap half / each quarter, mixed (P2 recognize).
+  5. `recall_name` — "what is this?" — say it aloud, "show me" reveals
+     the confirmation (P3 recall; no speech capture).
+  6. `equiv_half_two_quarters` — place 4 quarters to fill the whole,
+     then break it with a draggable hammer (P3 recall, equivalence).
+  7. `equiv_paper_check` — fold a square twice as a transfer proof.
+- **Four manipulative kinds** (`whole | naming | equivalence | paper`)
+  plus the new `recall` kind, each with a pure-logic module
+  (`wholeLogic`, `namingLogic`, `coverLogic`, `paperLogic`) and a
+  React component that only renders. Logic is unit-tested in isolation.
+- **Deterministic state machine in React** —
+  `useLessonStateMachine` + `useLessonPersistence`. No XState, no
+  Redux, no LangGraph. The only event the machine handles is
+  `handleManip(idx, state)`.
+- **Voice subsystem (ElevenLabs)** — pre-baked per-line MP3s +
+  manifest, FIFO queue, mute toggle, gesture-gated by `NamePrompt`,
+  view-driven (one line on advance, no chat rail). Plus material
+  SFX (chocolate snap, paper fold, whole split, hammer break) baked
+  via the ElevenLabs sound-generation endpoint.
+- **Observational spoken feedback** — `useSpokenFeedback` enqueues
+  short milestone lines (naming feedback, whole-split observation,
+  "four quarters fill the whole") through the same voice player.
+  Throttled so it never interrupts beat prose.
+- **Persistence** — `localStorage` snapshot under
+  `synthesis:lesson:<id>:state`, schema v7, `correctedLessonState`
+  repair on resume.
+- **`/` companion one-pager** — full-bleed scrollytelling on the
+  Montessori principles with small interactive demos
+  (`DemoConcrete`, `DemoControlOfError`, …), `Unveil` brand intro,
+  ambient audio toggle.
+- **iPad-first responsive layout** — breakpoint tiers at 1180 /
+  1024 / 900 / 720 px; `100dvh` lesson stage; `viewportFit: 'cover'`
+  + `touch-action: manipulation` for iOS Safari.
+- **Single analytics event** — `lesson_feedback` from the Outro
+  via PostHog; gated on `NEXT_PUBLIC_POSTHOG_KEY`, no-op without it.
 
-Optional reflection beats are non-blocking.
+## Deliberately deferred / not shipped
 
-The eight pedagogical principles (concrete-before-abstract, control-of-error,
-three-period lesson, description-not-praise, prepared-environment,
-redirect-not-reprimand, self-paced-reveal, aesthetic-minimalism) are the
-design north star. Cut anything that contradicts them.
+- **LangGraph + Haiku narrator.** Originally Phase 2 (hint /
+  paraphrase / classify-reflection routes). The
+  full agent layer (`src/lib/agent/`, `src/app/api/agent/`) was
+  deleted once the Montessori re-anchor made adult-voice hints and
+  paraphrased prose anti-Montessori. `@langchain/*` + `langsmith`
+  remain in `package.json` but nothing imports them — safe to drop in a
+  future dependency-cleanup pass.
+- **MC / hint / scaffold UI.** `MCBlock`, `HintBubble`,
+  `CelebrationBubble`, `ChatRail`, `branching.ts`, `validators.ts`
+  — all deleted. The material itself is the feedback (control of
+  error). The only "decision" left is the pure `isBeatComplete`
+  predicate.
+- **LangSmith dataset eval + GitHub Actions gate.** No agent →
+  nothing to evaluate.
+- **Multi-lesson picker.** `montessori-plan.md` proposed a
+  picker grid over Half / Quarter / Together / Equivalent so the kid
+  chooses. Not built — the active lesson is a single linear flow
+  through all seven beats. Picker is a clean future extension; the
+  state machine already keys snapshots by `lesson.id`.
+- **Real-world off-ramp cards.** The `montessori-plan.md`
+  "show your grown-up" prompts are not yet rendered per-beat.
+- **Symbol introduction (½ / ¼ glyphs).** Beat 5's reveal step shows
+  glyphs, but a dedicated symbol-naming lesson between L3 and L5 is
+  not built.
+- **Curriculum expansion** beyond half / quarter equivalence. The
+  architecture accommodates extension (new `Beat` rows with new
+  manipulative kinds + logic modules) but no other lessons exist.
+- **Multi-user / accounts / server-side persistence / PII.**
+  Out of scope for a 1-week prototype. All progress is per-device
+  in `localStorage`.
 
-## Phase Sequencing (MVP-first)
+## Decision log (load-bearing choices)
 
-### Phase 1 — Playable lesson, no LLM, no TTS (days 1–3)
+- **Frontend** — Next.js 16 App Router + React 19.2 + Tailwind v4.
+- **Touch / drag** — `@dnd-kit/core` (best iPad pointer support); used
+  for the hammer in `EquivalenceMaterial` and the corner in `PaperFold`.
+- **Animations** — `framer-motion` for spring physics on the chocolate
+  taps and the hammer drag.
+- **No XState / Redux / agent runtime.** The state machine is local
+  React + a pure predicate; the lesson has nothing to orchestrate.
+- **No LLM in the lesson loop.** ElevenLabs TTS is the only network
+  dependency at runtime, and the steady-state lesson hits only the
+  baked-manifest path (no `/api/tts` per learner once baked).
+- **Testing** — Vitest + RTL + jsdom, TDD red→green per
+  [CLAUDE.md](CLAUDE.md). Logic modules carry full test coverage;
+  visual / animation components skip tests with sign-off.
 
-Goal: a fully completable lesson on the iPad in Safari, end-to-end, with
-deterministic MC + manipulative checks only. This is the demo-safety floor;
-if Anthropic or ElevenLabs is down on demo day, this still ships.
+## Working agreements
 
-- TypeScript types for `Beat`, `ManipulativeConfig`, `MCConfig`, `LessonState`.
-- `lesson.json` with all 5 beats authored (prose + manipulative config + MC keys + canonical hints).
-- Three manipulatives, each in its own component file, each with built-in control-of-error:
-  - `ChocolateBar` — 4 quarter-pieces snap on a half-bar reference; dnd-kit for touch.
-  - `PizzaSlicer` — radial knife rotates to set slice count; deterministic angular bounds.
-  - `PaperFold` — square folds along axes; crease overlay shows 1/2 ≡ 2/4 alignment.
-- `MCBubble` — accessible radio-group-style bubble selection; verdict from deterministic key.
-- `LessonBeat` shell — prose + manipulative slot + MC slot; reveals via IntersectionObserver.
-- `LessonPage` (route) — vertical scroll-snap, beats in order, persists state to `localStorage`.
-- Canonical authored hint text shown on wrong MC (no Haiku yet).
-- Vitest coverage for: deterministic validators, manipulative end-state detection, MC selection,
-  scroll-reveal gating.
-
-### Phase 2 — Haiku 4.5 narrator (days 4–5)
-
-Goal: replace canonical hint/paraphrase text with Haiku output; keep canonical text as fallback.
-
-**Slice 1 (LIVE) — `generate_hint`:**
-- `src/app/api/agent/hint/route.ts` — POST endpoint, validates body, runs the LangGraph.
-- `src/lib/agent/generateHint.ts` — one-node `StateGraph` calling `ChatAnthropic` (Haiku 4.5).
-  SystemMessage encodes Montessori discipline; node defense-in-depth filters praise-bombing output.
-- `src/lib/agent/hintClient.ts` — client fetch wrapper, 1.2s timeout, null-on-fail.
-- `MCBubble` renders the canonical authored hint immediately (demo-safety floor),
-  then upgrades to the Haiku hint when `fetchHint` resolves. A `useRef` request id
-  guards against stale-overwrite when answering wrong twice in quick succession.
-- LangSmith tracing automatic via env vars (`LANGSMITH_TRACING=true`).
-- Anthropic ZDR confirmed before any session with a real child.
-
-**Slice 2 (LIVE) — unified lessonAgent with paraphrase + reflection:**
-- `src/lib/agent/lessonAgent.ts` — one `StateGraph` with conditional edges from
-  `START` routing on `state.input.task` into one of three nodes:
-  `hint | paraphrase | classify_reflection`. All three share the Montessori
-  discipline floor (no praise-bombing); each defense-in-depth filters its own
-  output.
-- `generateHint.ts` is now a thin back-compat wrapper around
-  `runLessonAgent({task:'hint'})`.
-- `/api/agent/paraphrase` + `paraphraseClient.ts` — `LessonBeat` calls
-  `fetchParaphrase` on becoming active; the displayed prose upgrades from
-  canonical to paraphrased when the response arrives.
-- `/api/agent/classify-reflection` + `classifyReflectionClient.ts` — plumbed,
-  ready for reflection-beat UI when the lesson data adds them. Returns
-  `{category, reaction}`; reaction is praise-filtered.
-
-**Slice 3 (TODO) — multi-beat orchestration + escalation:**
-- A bigger LessonState-keyed graph: nodes for each beat or per-stage; conditional
-  edges encode "advance / re-hint / escalate to guided beat" based on MC
-  result + manipulative state + attempt count (presearch §10 "three consecutive
-  wrong" rule).
-- Surface `validate_manipulative`, `read_manipulative_state`, `advance_to_beat`
-  as tools the agent can call.
-- Persist `LessonState` snapshots to `localStorage` for resume-on-reload.
-- System prompt + few-shot examples committed under `src/lib/agent/prompts/`.
-
-### Phase 3 — TTS + eval + polish (days 6–7)
-
-- ElevenLabs TTS server-side; pre-generate the next beat's audio one beat ahead.
-  Fall back to text-on-page silently on outage.
-- LangSmith traces + dataset eval:
-  - `classify_reflection` accuracy on ~60 labeled examples (gate: ≥85%).
-  - `generate_hint` Montessori hint-tone rubric via LLM-as-judge (gate: ≥4.0/5).
-  - High-stakes regression: MC-wrong-then-praise-bomb must never happen.
-- GitHub Actions runs unit + eval on every PR; blocks merge on regression.
-- Polish: typography, scroll-snap easing, manipulative spring physics, audio crossfade.
-- 1–2 min demo video recorded against a pinned `v1.0` tag for one-click rollback.
-
-## Out of Scope (1-week sprint)
-
-- Multi-user / accounts / PII storage.
-- Open-source release / licensing.
-- Adversarial testing.
-- Real-time monitoring / paging.
-- Curriculum expansion beyond fraction equivalence
-  (the architecture should *accommodate* extension, not implement it).
-
-## Decision Log (load-bearing choices)
-
-- **Frontend**: React + Next.js 16 App Router + Tailwind v4 (already scaffolded).
-- **Touch / drag**: `@dnd-kit/core` — best iPad pointer-event support.
-- **Animations**: `framer-motion` — spring physics for snap/cut/fold tactile feel.
-  Rejected: react-konva/PixiJS (canvas overhead not justified for ~10 draggables);
-  HTML5 native DnD (broken on iOS Safari touch); Yjs (no collaboration).
-- **Agent runtime**: LangGraph (JS) inside Next.js API routes. State persisted client-side.
-  Rejected: separate Python service (two deploys, no win at prototype scale).
-- **Model**: Claude Haiku 4.5 — fast, cheap, function-calling reliable, tone-steerable.
-- **TTS**: ElevenLabs (TTS only, no Conversational AI / no STT).
-- **Eval**: LangSmith — native LangGraph integration, zero-config traces.
-- **Testing**: Vitest + RTL + jsdom; TDD red→green per CLAUDE.md.
-
-## Working Agreements
-
-- Author the lesson script iteratively (per user: "iteratively"). Phase 1 ships
-  with a first-cut script; refine beat-by-beat as prose/MC/hint copy is reviewed.
-- API keys (Anthropic, ElevenLabs, LangSmith) arrive partway through the sprint;
-  Phase 1 must be fully playable without any of them.
-- Every meaningful change ends with `npm run test:run` + `npm run lint:fix` green
-  (per [CLAUDE.md](CLAUDE.md)).
+- The lesson script is authored in `lessonData.ts`. Editing prose
+  there is a content change; rerun `npm run bake:voice` before demo
+  to refresh the static-audio manifest.
+- Every meaningful change ends with `npm run test:run` +
+  `npm run lint:fix` green ([CLAUDE.md](CLAUDE.md)).
+- API keys (ElevenLabs, PostHog) are optional at runtime; the lesson
+  remains playable without them (silent + no analytics).

@@ -1,12 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react';
 import Image from 'next/image';
 import {
   DndContext,
-  DragOverlay,
-  MouseSensor,
-  TouchSensor,
+  PointerSensor,
   pointerWithin,
   useDraggable,
   useDroppable,
@@ -18,17 +23,13 @@ import type { EquivalenceConfig, EquivalenceState } from '@/lib/lesson/types';
 import { coverStatusText, isCovered, placeQuarter } from '@/lib/lesson/coverLogic';
 import { ChocolatePiece } from '@/components/manipulatives/ChocolatePiece';
 import { getSfxPlayer } from '@/lib/audio/sfxPlayer';
+import { useSpokenFeedback } from '@/lib/lesson/useSpokenFeedback';
 
 /** Unit-based sizing — one quarter = one UNIT_PX square, four of them
  *  side-by-side make the whole bar (matches the WholeMaterial). */
 const UNIT_PX = 80;
 const PILE_INITIAL = 4;
-/** Hammer icon (inner image) size, and the draggable button box size.
- *  The drag ghost MUST match the button box (72) — dnd-kit positions the
- *  overlay using the source element's rect, so a smaller ghost made the
- *  hammer drift away from the finger ("not matching"). */
 const HAMMER_PX = 56;
-const HAMMER_BTN_PX = 72;
 
 const HAMMER_ID = 'equivalence-hammer';
 const TRAY_ID = 'equivalence-tray';
@@ -43,20 +44,23 @@ export type EquivalenceMaterialProps = {
 /**
  * Lesson 05 — "fill the whole, then break it."
  *
- * Tray: same width as the WholeMaterial bar (4 quarter-units, no
- * frame). The kid taps quarters from the pile on the right; each tap
- * drops a quarter into the next empty slot. Four placed = the whole
- * fills (data-covered=true → glow), and the beat completes.
+ * Tray: same width as the WholeMaterial bar (4 quarter-units, no frame).
+ * The kid taps quarters from the pile; each tap drops one into the next
+ * empty slot. Four placed = the whole fills (data-covered) and the beat
+ * completes.
  *
- * Once filled, a small square hammer icon appears next to the tray.
- * Drag the hammer onto the bar → the chocolate "breaks" (placedCount
- * resets to 0, pile refills). The kid can fill-and-break repeatedly
- * to explore the equivalence; the beat stays done once first hit.
+ * Once filled, a square hammer appears. Drag it onto the bar → release
+ * over the tray → the chocolate breaks (placedCount → 0, pile refills).
  *
- * Drag-and-drop is wired through @dnd-kit/core (Mouse + Touch sensors,
- * pointerWithin collision). Keyboard activation is handled manually so a
- * single Enter/Space on the focused hammer breaks the bar (matching the
- * test surface and giving non-pointer users a path).
+ * Drag is @dnd-kit/core with the smooth single-draggable pattern: the
+ * live `transform` is applied to the hammer button itself (GPU-composited
+ * translate3d, so it glides under the finger) rather than a DragOverlay.
+ * A `PointerSensor` with a small distance constraint (no delay) makes the
+ * drag pick up immediately on the first move while a plain tap does
+ * nothing; `touch-action: none` on the hammer (globals.css) stops the
+ * page scrolling out from under a touch-drag. `pointerWithin` collision
+ * means the drop is decided by the finger position, not the dragged box.
+ * Enter/Space on the focused hammer breaks the bar too (keyboard + tests).
  */
 export function EquivalenceMaterial({
   config,
@@ -70,7 +74,6 @@ export function EquivalenceMaterial({
   const pileRemaining = Math.max(0, PILE_INITIAL - placed);
   const status = coverStatusText({ placedCount: placed }, target);
 
-  const [isDragging, setIsDragging] = useState(false);
   const [justBroken, setJustBroken] = useState(false);
   const justBrokenTimerRef = useRef<number | null>(null);
 
@@ -83,18 +86,24 @@ export function EquivalenceMaterial({
     [],
   );
 
+  const speakFeedback = useSpokenFeedback();
+
   const handleTap = (): void => {
     if (disabled) return;
     getSfxPlayer().play('chocolateSnap');
     const result = placeQuarter({ placedCount: placed }, target);
     if (!result.accepted) return;
-    onChange({ kind: 'equivalence', placedCount: result.newState.placedCount });
+    const next = result.newState.placedCount;
+    onChange({ kind: 'equivalence', placedCount: next });
+    if (next >= target) {
+      speakFeedback(coverStatusText({ placedCount: next }, target));
+    }
   };
 
   const breakIt = useCallback(() => {
     if (disabled) return;
     if (placed <= 0) return;
-    getSfxPlayer().play('chocolateSnap');
+    getSfxPlayer().play('hammerBreak');
     onChange({ kind: 'equivalence', placedCount: 0 });
     if (justBrokenTimerRef.current !== null) {
       window.clearTimeout(justBrokenTimerRef.current);
@@ -106,27 +115,15 @@ export function EquivalenceMaterial({
     }, 900);
   }, [disabled, placed, onChange]);
 
-  // Tablet-first sensor setup:
-  //  - TouchSensor with a short press-delay + movement tolerance so a
-  //    finger drag starts cleanly without fighting page scroll, and a
-  //    quick tap doesn't accidentally pick the hammer up.
-  //  - MouseSensor with a small activation distance for desktop.
-  // Combined with `touch-action: none` on the hammer (globals.css), this
-  // is the standard dnd-kit recipe for reliable touch dragging.
+  // One PointerSensor handles mouse + touch + pen. `distance: 8` means the
+  // drag starts as soon as the finger travels 8px (no hold delay → feels
+  // instant), while a stationary tap never starts a drag.
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 120, tolerance: 8 },
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
-      setIsDragging(false);
-      // `pointerWithin` collision detection means `over` is set whenever
-      // the finger/cursor is inside the tray on release — intuitive for
-      // "bring the hammer to the chocolate". Fall back to breaking on any
-      // release while covered would be too loose, so we require the tray.
       if (event.over?.id === TRAY_ID) breakIt();
     },
     [breakIt],
@@ -136,18 +133,12 @@ export function EquivalenceMaterial({
     <DndContext
       sensors={sensors}
       collisionDetection={pointerWithin}
-      onDragStart={() => setIsDragging(true)}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setIsDragging(false)}
     >
       <div className="equivalence-stage">
         <div className="equivalence-material" data-covered={covered || undefined}>
-          <TrayDroppable
-            target={target}
-            placed={placed}
-            covered={covered}
-            justBroken={justBroken}
-          />
+          <TrayDroppable target={target} placed={placed} covered={covered} justBroken={justBroken} />
+
           <div className="equivalence-rail">
             {!covered && (
               <div className="equivalence-pile" aria-label="pile of quarters">
@@ -166,11 +157,7 @@ export function EquivalenceMaterial({
               </div>
             )}
             {covered && (
-              <HammerDraggable
-                disabled={disabled}
-                isDragging={isDragging}
-                onKeyboardBreak={breakIt}
-              />
+              <HammerDraggable disabled={disabled} onKeyboardBreak={breakIt} />
             )}
           </div>
         </div>
@@ -184,20 +171,6 @@ export function EquivalenceMaterial({
           {status}
         </div>
       </div>
-
-      {/* Drag ghost — dnd-kit handles cursor positioning; we only style
-          the contents to read as a tilted hammer card. */}
-      <DragOverlay dropAnimation={null}>
-        {isDragging ? (
-          <span
-            className="equivalence-hammer-ghost"
-            aria-hidden
-            style={{ width: HAMMER_BTN_PX, height: HAMMER_BTN_PX }}
-          >
-            <HammerImage />
-          </span>
-        ) : null}
-      </DragOverlay>
     </DndContext>
   );
 }
@@ -240,36 +213,43 @@ function TrayDroppable({
   );
 }
 
-/** Hammer button — dnd-kit pointer drag + manual Enter/Space keyboard
- *  fallback (single press → break, no two-step pick-up dance). */
+/**
+ * Hammer button. The live drag `transform` is applied to the button
+ * itself via `translate3d` so it glides smoothly under the finger (no
+ * overlay, no size-mismatch). Enter/Space breaks the bar without a drag.
+ */
 function HammerDraggable({
   disabled,
-  isDragging,
   onKeyboardBreak,
 }: {
   readonly disabled: boolean;
-  readonly isDragging: boolean;
   readonly onKeyboardBreak: () => void;
 }) {
-  const { attributes, listeners, setNodeRef } = useDraggable({
-    id: HAMMER_ID,
-    disabled,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: HAMMER_ID, disabled });
+
+  const style: CSSProperties | undefined = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: 1000,
+      }
+    : undefined;
+
   return (
     <button
       ref={setNodeRef}
       type="button"
       className={`equivalence-hammer${isDragging ? ' is-dragging' : ''}`}
+      style={style}
       {...listeners}
       {...attributes}
-      onKeyDown={(e) => {
+      onKeyDown={(e: KeyboardEvent<HTMLButtonElement>) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
         onKeyboardBreak();
       }}
       disabled={disabled}
       aria-label="drag the hammer onto the bar to break it"
-      style={isDragging ? { visibility: 'hidden' } : undefined}
     >
       <HammerImage />
     </button>

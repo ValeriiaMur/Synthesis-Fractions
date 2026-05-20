@@ -2,6 +2,7 @@ import type { ManipulativeConfig, ManipulativeState } from '@/lib/lesson/types';
 import { WholeMaterial } from './WholeMaterial';
 import { NamingMaterial } from './NamingMaterial';
 import { EquivalenceMaterial } from './EquivalenceMaterial';
+import { RecallMaterial } from './RecallMaterial';
 import { PaperFold } from '@/components/manipulatives/PaperFold';
 
 export type ManipulativeSlotProps = {
@@ -40,6 +41,16 @@ export function ManipulativeSlot({
     return (
       <PaperFold
         value={value?.kind === 'paper' ? value : undefined}
+        onChange={onChange}
+        disabled={disabled}
+      />
+    );
+  }
+  if (manip.kind === 'recall') {
+    return (
+      <RecallMaterial
+        config={manip}
+        value={value?.kind === 'recall' ? value : undefined}
         onChange={onChange}
         disabled={disabled}
       />

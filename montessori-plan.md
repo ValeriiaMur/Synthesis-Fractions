@@ -1,6 +1,16 @@
 # Montessori Fractions — Curriculum Plan
 
-Status: DRAFT for sign-off. No code changes until val approves.
+Status: **shipped reference.** This was the redesign proposal that
+replaced the original "Spirit run" chat-tutor. The five commitments
+(naming first, one material per concept, quiet voice, control of error
+in the material, no verbal hints) are all live; the four-lesson
+sequence below was expanded during build into **seven beats**
+(adds `whole_intro` at the start, splits the original L3 "halves and
+quarters together" into a P2 *recognize* beat and a P3 *recall* beat,
+and adds `equiv_paper_check` as a transfer proof at the end). Treat the
+rest of this document as the pedagogy rationale — the architecture
+as-built is in [`summary.md`](summary.md) and the shipped/deferred scope
+is in [`PLAN.md`](PLAN.md).
 
 ---
 

@@ -7,7 +7,7 @@
 
 import type { BeatId, ManipulativeState } from './types';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export type PersistedLessonState = {
   readonly schemaVersion: number;
@@ -71,6 +71,7 @@ function isManipulativeState(v: unknown): v is ManipulativeState {
       (f: unknown) => f === 'horizontal' || f === 'vertical',
     );
   }
+  if (v.kind === 'recall') return typeof v.revealed === 'boolean';
   return false;
 }
 

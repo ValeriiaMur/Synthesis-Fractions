@@ -1,39 +1,47 @@
-# Synthesis — Spirit Run
+# Synthesis — naming-first fractions
 
 A one-week prototype of a Synthesis-style math tutor. One self-contained
-lesson on **fraction equivalence (½ = ²⁄₄)**, framed as a six-stop
-cosmos delivery (the "Spirit run") for a 7–10 year old on an iPad.
+**naming-first** fractions lesson on halves and quarters, built for a 6–8
+year old on an iPad, plus a "How It Works" one-pager that walks adult
+viewers through the Montessori principles behind the design.
 
 - **Live route:** `/lesson` — the lesson itself.
-- **Companion route:** `/` — "How It Works", an adult-facing one-pager
-  on the eight Montessori principles behind the lesson.
+- **Companion route:** `/` — full-bleed scrollytelling on the Montessori
+  principles, with small interactive demos.
 
-<img width="900" height="910" alt="Screenshot 2026-05-19 at 4 31 16 PM" src="https://github.com/user-attachments/assets/b5adbdc7-55af-4783-b4c9-e4a8affa124d" />
+<img width="900" height="910" alt="Screenshot 2026-05-19 at 4 31 16 PM" src="https://github.com/user-attachments/assets/b5adbdc7-55af-4783-b4c9-e4a8affa124d" />
 
 ## What it is
 
-- **Chat-style tutor, scripted.** Each cell in the vertical notebook is
-  one turn of a conversation: Ari speaks (`<Prose>`), the student
-  responds (manipulative or MC), the response is echoed back
-  (`<StudentEcho>`), Ari reacts (`<HintBubble>` or `<CelebrationBubble>`),
-  and the next cell unlocks. Every tutor line is **authored** in
-  [`src/lib/lesson/lessonData.ts`](src/lib/lesson/lessonData.ts) — no
-  LLM is in the active path. Branching (which hint to play, when to
-  scaffold, where to advance) is a pure unit-tested module
-  [`src/lib/lesson/branching.ts`](src/lib/lesson/branching.ts).
-- **Interactive manipulatives.** Four hand-built fraction tools — a
-  chocolate-bar ration tray, a moon-pizza slicer, a star-paper folder,
-  and a multi-rail Block Studio — each lets the kid combine, split,
-  or rearrange fraction pieces to *see* equivalence before naming it.
-- **Voice.** ElevenLabs TTS narrates every authored line so Ari sounds
-  warm without being stochastic. Mute toggle in the top bar; defaults
-  to on after a one-click sound-check on the name modal.
-- **Persistence.** Progress is saved to `localStorage` on every state
-  change (synchronous writes + a `beforeunload` backstop). Returning
-  later lands the kid on their last cell.
+- **Fully scripted, no LLM.** Per the 1-week brief, every tutor line is
+  authored in [`src/lib/lesson/lessonData.ts`](src/lib/lesson/lessonData.ts).
+  There is no LLM agent, no chat rail, no MC / hint / scaffold paths.
+- **Seven beats, three Montessori periods.** Whole → name half → name
+  quarter → mix → recall → equivalence (build the whole, hammer-break
+  it) → paper-fold transfer check.
+- **One material across naming → equivalence.** Beats 0–5 use the same
+  chocolate-bar visual (`ChocolatePiece` + a `seamless` mode). Beat 6
+  swaps to a square of paper for the transfer check.
+- **Material-as-feedback.** No celebration bubbles, no hint bubbles, no
+  praise. Wrong taps are silent rejections from pure-logic helpers; right
+  taps animate the material. Adult-voice copy is gone (control of error).
+- **Voice (ElevenLabs).** TTS narrates the beat prose on entry and
+  emits a small set of observational lines (`useSpokenFeedback`) for
+  milestones — naming feedback, the whole-split observation, "four
+  quarters fill the whole". A FIFO queue + mute toggle ride on a singleton
+  voice player. Mute silences voice + SFX together.
+- **Pre-baked audio.** Every Ari line is generated once into
+  `public/audio/voice/<sha>.mp3` plus a manifest; `/api/tts` is the
+  un-baked-line fallback. Run `npm run bake:voice` after editing prose.
+- **Material SFX.** Short ElevenLabs sound-effects clips for chocolate
+  snap, paper fold, whole-split, hammer-break — baked offline via
+  `npm run bake:sfx`.
+- **Persistence.** Progress saves to `localStorage` on every state
+  change (synchronous + `beforeunload` backstop). `SCHEMA_VERSION = 7`;
+  older snapshots are silently dropped on load.
 - **iPad-first responsive.** Built and tested against iPad mini through
-  iPad Pro 12.9", portrait and landscape. Home page is full-bleed
-  scrollytelling; the lesson is a single full-width notebook column.
+  iPad Pro 12.9", portrait and landscape. The lesson is a single
+  full-width notebook column.
 
 ## Running it
 
@@ -45,87 +53,93 @@ npm run dev
 Open <http://localhost:3000> for the home page, or
 <http://localhost:3000/lesson> for the lesson directly.
 
-The build also runs against `npm run build` + `npm start` for a
-production check; deployment target is any standard Next.js host
-(Vercel, Cloudflare Pages, Render, etc.).
+`npm run build` + `npm start` runs the production build; deployment
+target is any standard Next.js host (Vercel, Cloudflare Pages, Render).
 
 ### Environment
 
 | Var | Required? | What for |
 | --- | --------- | -------- |
-| `ELEVENLABS_API_KEY` | optional | Server-side TTS at `/api/tts`. Without it the lesson plays silent — every tutor line is still rendered on screen. |
-| `ANTHROPIC_API_KEY` | not used | Only relevant if the dormant LLM agent under `src/lib/agent/` is reactivated; the active lesson never calls it. |
+| `ELEVENLABS_API_KEY` | optional at runtime, required to (re)bake voice / SFX | Server-side TTS at `/api/tts` (fallback for un-baked lines only). Read by `npm run bake:voice` and `npm run bake:sfx` to generate static audio under `public/audio/`. Without it the lesson plays silent for any line not already in the baked manifest — the prose still renders on screen. |
+| `NEXT_PUBLIC_POSTHOG_KEY` | optional | Enables a single `lesson_feedback` capture from the Outro. No-op when unset. `NEXT_PUBLIC_POSTHOG_HOST` overrides the endpoint (defaults to PostHog US cloud). |
 
 The lesson runs **fully offline** if TTS isn't configured — the kid
-reads the cells, works the manipulatives, and the lesson advances on
-correct MCs. Audio is decoration, not gating.
+reads the cells, works the manipulatives, and the lesson advances. Audio
+is decoration, not gating.
 
 ## Technical approach
 
 - **Next.js 16 (App Router), React 19.2, TypeScript strict.**
 - **Tailwind v4** for the cosmos palette; bespoke CSS classes for cell /
-  manipulative surfaces in [`globals.css`](src/app/globals.css).
-- **Deterministic state machine in React.** `LessonPage` holds
-  `activeIdx`, `doneSet`, `mcSel`, `mcStatus`, `hintAttempts`,
-  `manipStates`, `liveHints`, `scaffoldedMC`, `unlockedBanners`.
-  Persisted via `lessonPersistence.ts`. No XState, no Redux.
-- **Pure-function branching layer.** Every "what does Ari say next?"
-  decision goes through `reactToMC` / `enterLineFor` in
-  `branching.ts`. Tested in isolation in `branching.test.ts` (17 cases,
-  no mocks).
+  manipulative / scene surfaces in [`globals.css`](src/app/globals.css).
+- **Deterministic state in React.** `LessonPage` holds `activeIdx`,
+  `doneSet`, `manipStates`, `unlockedBanners`; the only event is
+  `handleManip(idx, state)` which runs `isBeatComplete` and advances on
+  truth. Persisted via [`lessonPersistence.ts`](src/lib/lesson/lessonPersistence.ts).
+  No XState, no Redux.
+- **Pure-logic modules per material.** [`wholeLogic`](src/lib/lesson/), [`namingLogic`](src/lib/lesson/namingLogic.ts),
+  [`coverLogic`](src/lib/lesson/coverLogic.ts), [`paperLogic`](src/lib/lesson/paperLogic.ts),
+  recall — each synchronous, no fetch, no React imports, unit-tested in
+  isolation. The components only render; the logic decides.
 - **Voice subsystem.** `voicePlayer` is a singleton FIFO queue around
-  one `<Audio>` element; `ttsClient` is a per-text Blob cache around
-  `/api/tts`. Page-bound: ambient on `/`, Ari on `/lesson` — each
-  cleans up on unmount via `pause()` and `stop()` (the latter aborts the
-  in-flight utterance via `AbortSignal`).
-- **Vitest 4 + Testing Library 16 + jsdom 29.** Pure helpers, agent
-  nodes (dormant), persistence, manipulative state machines, and the
-  view-driven voice contract are all unit-tested. Visual / animation
-  components skip tests per the project policy.
-- **No LLM in the active path.** Per the 1-week brief, the tutor is
-  fully scripted. The earlier LangGraph + LLM agent files (under
-  `src/lib/agent/` and `src/app/api/agent/`) remain on disk as dead
-  code for forensic value; nothing in `/lesson` imports them. See
-  [`summary.md`](summary.md) for the full architecture write-up.
+  one `<audio>` element; `ttsClient` is a per-text Blob cache that first
+  consults the baked manifest before falling back to `/api/tts`. Mute is
+  a hard floor and is persisted under `synthesis:voice:muted`.
+- **Vitest 4 + Testing Library 16 + jsdom 29.** Pure helpers,
+  persistence, the voice contract, and the new spoken-feedback hook are
+  all unit-tested. Visual / animation components skip tests per the
+  project policy.
+
+See [`summary.md`](summary.md) for the full architecture write-up and
+[`montessori-plan.md`](montessori-plan.md) for the pedagogy rationale
+(cognitive coherence, control of error, three-period lesson).
 
 ## Project structure
 
-A condensed map — the architecture document
-[`summary.md`](summary.md) has the full version with rationale.
+Condensed map — [`summary.md`](summary.md) has the full version with
+rationale.
 
 ```
 src/
   app/
     page.tsx                — home (HowItWorksPage)
-    lesson/page.tsx         — lesson route + Name + Resume gates
-    api/tts/route.ts        — ElevenLabs TTS proxy
+    lesson/page.tsx         — lesson route + NamePrompt gate
+    api/tts/route.ts        — ElevenLabs TTS proxy (fallback only)
   components/
-    lesson/                 — LessonPage, Cell, Prose, MCBlock,
-                              HintBubble, CelebrationBubble,
-                              StudentEcho, TopBar, Intro, Outro,
-                              NamePrompt, ResumePrompt
-    manipulatives/          — ChocolateBar, PizzaSlicer, PaperFold,
-                              BlockStudio, FractionBox (dormant)
-    onepager/               — Hero, PrincipleRow, AmbientAudio,
-                              ScrollDownInvite, ScrollTopButton,
-                              and the demos
-    space/                  — Stars, GridBg, Doodles
+    lesson/                 — LessonPage, LessonBeatCell, ManipulativeSlot,
+                              WholeMaterial, NamingMaterial,
+                              EquivalenceMaterial, NamePrompt,
+                              Cell, Prose, TopBar, Outro, ResumePrompt
+    manipulatives/          — ChocolatePiece, PaperFold (+ paper/ helpers)
+    onepager/               — HowItWorksPage, Hero, HeroPreview,
+                              PrincipleRow, SideRail, AmbientAudio,
+                              AmbientGlow, Unveil, FinalCTA, demos/
+    space/                  — Stars, GridBg, Doodles (+ doodle icons)
   lib/
     lesson/
-      lessonData.ts         — the script: prose, MC, hints, scaffolds,
-                              enter lines, correct replies
-      branching.ts          — reactToMC / interpolate / enterLineFor
-      types.ts              — Beat, MCConfig, ScaffoldedMC, ...
-      lessonPersistence.ts  — localStorage shape + decode/encode
-      completes.ts          — isBeatComplete / lookupHint
-      stripMarkup.ts        — strip {y}…{/y} highlight tokens for TTS
+      lessonData.ts         — the seven scripted beats
+      types.ts              — Beat, ManipulativeConfig, ManipulativeState
+      completes.ts          — isBeatComplete (pure predicate)
+      namingLogic.ts        — L1–L3 tap-to-name logic
+      coverLogic.ts         — L5 fill-the-whole logic
+      paperLogic.ts         — L6 paper-fold logic
+      lessonPersistence.ts  — localStorage shape + corrected-state repair
+      useLessonStateMachine.ts — handleManip + advanceTo
+      useLessonVoice.ts     — speakAri + mute
+      useSpokenFeedback.ts  — milestone observational lines
     voice/
-      voicePlayer.ts        — FIFO queue + AbortSignal interrupt
-      ttsClient.ts          — fetch + per-text Blob cache
+      voicePlayer.ts        — FIFO queue + mute
+      ttsClient.ts          — manifest → static MP3, else /api/tts
       elevenLabsClient.ts   — server-side ElevenLabs wrapper
-      playSample.ts         — one-shot sound-check used by NamePrompt
+      playSample.ts         — one-shot sound-check on NamePrompt
     audio/
-      ambientPlayer.ts      — home-page looping pad with pause/resume
+      ambientPlayer.ts      — home-page looping pad
+      sfxPlayer.ts          — material SFX (snap, fold, split, break)
+    analytics/
+      posthog.ts            — lesson_feedback capture (no-op without key)
+scripts/
+  bake-voice.mts            — pre-generate per-line MP3s + manifest
+  bake-sfx.mts              — pre-generate material SFX MP3s
 ```
 
 ## Scripts
@@ -137,4 +151,6 @@ src/
 | `npm start` | Run the production build locally. |
 | `npm run lint` / `npm run lint:fix` | ESLint (check / auto-fix). |
 | `npm test` | Vitest watch. |
-| `npm run test:run` | Vitest one-shot (CI / pre-commit). |
+| `npm run test:run` | Vitest one-shot (for CI / pre-commit). |
+| `npm run bake:voice` | Re-bake per-line MP3s + `manifest.json` from the scripted prose. Skip-if-exists. Reads `ELEVENLABS_API_KEY` from `.env`. |
+| `npm run bake:sfx` | Re-bake material SFX MP3s (chocolate snap, paper fold, whole split, hammer break). Skip-if-exists. |

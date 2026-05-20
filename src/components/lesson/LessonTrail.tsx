@@ -51,7 +51,6 @@ export function LessonTrail({ allDone }: LessonTrailProps): React.ReactElement {
       <div className="lesson-trail-flag">
         <span className="lesson-trail-flag-pole" />
         <span className="lesson-trail-flag-cloth" />
-        <span className="lesson-trail-flag-pin" />
       </div>
     </div>
   );

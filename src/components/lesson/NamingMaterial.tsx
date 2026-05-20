@@ -12,6 +12,7 @@ import {
 } from '@/lib/lesson/namingLogic';
 import { ChocolatePiece } from '@/components/manipulatives/ChocolatePiece';
 import { getSfxPlayer } from '@/lib/audio/sfxPlayer';
+import { useSpokenFeedback } from '@/lib/lesson/useSpokenFeedback';
 
 /** Unit-based sizes — matches the home tray demo and the WholeMaterial:
  *  one quarter = one UNIT_PX square, one half = TWO units (a 2×1 slab made
@@ -95,6 +96,8 @@ export function NamingMaterial({
     idleTimerRef.current = window.setTimeout(() => setIdle(true), IDLE_HINT_MS);
   }, []);
 
+  const speakFeedback = useSpokenFeedback();
+
   const tappedIndices = value?.tapped ?? [];
   const tappedSet = new Set(tappedIndices);
   const promptKind = pickPromptKind(fractions, tappedIndices);
@@ -110,6 +113,8 @@ export function NamingMaterial({
     // change state (the kid already mastered that piece).
     const fb = feedbackMessage(promptKind, tappedKind);
     setFeedback(fb);
+    // Speak the observation too (throttled, enqueued after any prose).
+    speakFeedback(fb.text);
     if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
     feedbackTimerRef.current = window.setTimeout(() => {
       setFeedback(null);

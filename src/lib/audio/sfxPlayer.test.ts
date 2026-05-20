@@ -63,5 +63,21 @@ describe('createSfxPlayer', () => {
   it('exposes the expected SFX keys with /audio/sfx/* paths', () => {
     expect(SFX_SRC.chocolateSnap).toBe('/audio/sfx/chocolate-snap.mp3');
     expect(SFX_SRC.paperFold).toBe('/audio/sfx/paper-fold.mp3');
+    expect(SFX_SRC.wholeSplit).toBe('/audio/sfx/whole-split.mp3');
+    expect(SFX_SRC.hammerBreak).toBe('/audio/sfx/hammer-break.mp3');
+  });
+
+  it('defaults to a clearly audible volume (0.55) when none is configured', () => {
+    const created: Array<{ volume: number }> = [];
+    const player = createSfxPlayer({
+      isMuted: () => false,
+      createAudio: (src) => {
+        const el = { src, volume: 0, play: vi.fn() };
+        created.push(el);
+        return el;
+      },
+    });
+    player.play('chocolateSnap');
+    expect(created[0].volume).toBe(0.55);
   });
 });

@@ -2,6 +2,8 @@
 
 import type { WholeState } from '@/lib/lesson/types';
 import { ChocolatePiece } from '@/components/manipulatives/ChocolatePiece';
+import { getSfxPlayer } from '@/lib/audio/sfxPlayer';
+import { useSpokenFeedback } from '@/lib/lesson/useSpokenFeedback';
 
 /** One quarter-square in CSS pixels. The intro bar is built from 4 of these
  *  laid out with NO gap so the kid reads them as one continuous whole. When
@@ -58,15 +60,23 @@ export function WholeMaterial({
   disabled = false,
 }: WholeMaterialProps) {
   const split = value?.split ?? false;
-
-  const handleTap = (): void => {
-    if (disabled) return;
-    onChange({ kind: 'whole', split: !split });
-  };
+  const speakFeedback = useSpokenFeedback();
 
   const status = split
     ? 'yes — one whole, split into two halves. each half is two quarters.'
     : 'this is one whole. tap to split it in half.';
+
+  const handleTap = (): void => {
+    if (disabled) return;
+    const willSplit = !split;
+    // Split = the bar cracks apart; snap-back reuses the soft chocolate snap.
+    getSfxPlayer().play(willSplit ? 'wholeSplit' : 'chocolateSnap');
+    onChange({ kind: 'whole', split: willSplit });
+    // Voice the observation only on the split (not the snap-back).
+    if (willSplit) {
+      speakFeedback('one whole, split into two halves. each half is two quarters.');
+    }
+  };
 
   return (
     <div className="whole-stage">

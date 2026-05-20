@@ -118,6 +118,32 @@ describe('isBeatComplete — equivalence (whole = 4 quarters)', () => {
   });
 });
 
+describe('isBeatComplete — recall', () => {
+  const recallBeat: Beat = {
+    id: 'recall_name',
+    phase: 'period_3_recall',
+    kindLabel: 'what is this?',
+    prose: 'What is this? Say it out loud — then show me.',
+    manipulative: { kind: 'recall', fraction: 'half' },
+  };
+
+  it('is true once the answer is revealed', () => {
+    expect(isBeatComplete(recallBeat, { kind: 'recall', revealed: true })).toBe(
+      true,
+    );
+  });
+  it('is false before reveal', () => {
+    expect(isBeatComplete(recallBeat, { kind: 'recall', revealed: false })).toBe(
+      false,
+    );
+  });
+  it('is false when state kind does not match', () => {
+    expect(
+      isBeatComplete(recallBeat, { kind: 'naming', tapped: [0, 1] }),
+    ).toBe(false);
+  });
+});
+
 describe('isBeatComplete — paper-fold transfer check', () => {
   it('is true after both required folds have been made', () => {
     expect(

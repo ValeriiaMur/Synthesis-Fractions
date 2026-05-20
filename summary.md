@@ -31,30 +31,49 @@ Two UI routes, one visual system (cosmos / space palette in
   Goes through a `NamePrompt` first (the click satisfies the browser's
   autoplay-gesture requirement so the lesson can speak its prose).
 
-The six beats:
+The seven beats:
 
 | # | Beat id                    | Concept                        | Material                                                              |
 |---|----------------------------|--------------------------------|-----------------------------------------------------------------------|
-| 0 | `whole_intro`              | Period 1 — introduce ① (whole) | Chocolate bar (4 quarter-units, no gap); tap splits it into two halves |
-| 1 | `name_half`                | Period 1 — introduce ½         | Chocolate bar, 2 tap regions                                          |
-| 2 | `name_quarter`             | Period 1 — introduce ¼         | Chocolate bar, 4 tap regions                                          |
-| 3 | `mix_half_quarter`         | Period 2 — recognize ½ vs ¼    | Mixed mat (1 half tile + 4 quarters) with a cycling "tap the X" label |
-| 4 | `equiv_half_two_quarters`  | Period 3 — ½ = ²⁄₄ (recall)    | Chocolate tap-to-cover (half-frame + 2 slots + a pile of quarters)    |
-| 5 | `equiv_paper_check`        | Period 3 — *transfer* check    | Paper-fold (square, fold twice = proof)                               |
+| 0 | `whole_intro`              | Period 1 — introduce ① (whole) | Chocolate bar (4 quarter-units, no gap); tap splits it into two halves (toggle) |
+| 1 | `name_half`                | Period 1 — introduce ½         | Chocolate tray, 2 half-slabs; tap each (½ overlay)                    |
+| 2 | `name_quarter`             | Period 1 — introduce ¼         | Chocolate tray, 4 quarter-tiles; tap each (¼ overlay)                 |
+| 3 | `mix_half_quarter`         | Period 2 — recognize ½ vs ¼    | Mixed mat (4 quarters + a centered half) with a cycling "tap the X" label |
+| 4 | `recall_name`              | Period 3 — recall ("what is this?") | Recall: one piece, say it aloud, "show me" reveals the symbol + voice names it back (no STT) |
+| 5 | `equiv_half_two_quarters`  | Period 3 — whole = 4 quarters  | Chocolate fill-the-whole (4 slots + pile) + draggable hammer that breaks it (dnd-kit) |
+| 6 | `equiv_paper_check`        | Period 3 — *transfer* check    | Paper-fold (square, fold twice = proof)                               |
 
-Beats 0–4 use the **same chocolate material** (cognitive coherence — one
-visual schema across whole → naming → equivalence; the chocolate art is a
-single PNG at `public/images/chocolate.png` rendered through
-`ChocolatePiece`). Beat 5 swaps to paper-fold as a transfer check: the
-kid has proved the equivalence on chocolate; can they recognize it in a
-new representation? Two folds → done.
+Beats 0–5 use the **same chocolate material** (cognitive coherence — one
+visual schema across whole → naming → recall → equivalence; chocolate art
+in `public/images/` rendered through `ChocolatePiece`, with a `seamless`
+mode so quarter-units merge into one bar). Beat 6 swaps to paper-fold as a
+transfer check. Beat 4 (recall) is the canonical Montessori third period:
+the child *names the piece aloud* and reveals the confirmation — no speech
+capture.
+
+**Voice + SFX (ElevenLabs).** Beyond per-beat prose TTS, the lesson now
+has two more audio layers, both muted by the single topbar toggle:
+- **Material SFX** — `sfxPlayer` (default volume 0.55) plays short clips
+  baked via `scripts/bake-sfx.mts` (ElevenLabs Sound Effects API):
+  `chocolateSnap`, `paperFold`, `wholeSplit`, `hammerBreak`. Missing files
+  no-op silently.
+- **Spoken observational feedback** — `useSpokenFeedback` enqueues
+  milestone lines through the voice player (FIFO, throttled ~1.3s, never
+  interrupts the beat prose): naming feedback, the whole-split observation,
+  and the "four quarters fill the whole" line. Live `/api/tts` covers any
+  un-baked line.
+
+No STT, no Conversational AI, no LLM in the lesson loop — per the presearch
+scope. (PostHog captures one `lesson_feedback` event from the Outro;
+gated on `NEXT_PUBLIC_POSTHOG_KEY`, no-op without it.)
 
 **Decision contract.** There is no `branching.ts` anymore — the active
 lesson has no branching to do. State lives in React (`LessonPage`) and on
-disk (`lessonPersistence.ts`); the only "rule" is `isBeatComplete` in
-[`completes.ts`](src/lib/lesson/completes.ts), a pure dispatch on the
-manipulative kind: naming = `streak >= masteryStreak`, equivalence =
-`placedCount >= targetCount`, paper = `folds.length >= targetFolds.length`.
+disk (`lessonPersistence.ts`, schema v7); the only "rule" is `isBeatComplete`
+in [`completes.ts`](src/lib/lesson/completes.ts), a pure dispatch on the
+manipulative kind: whole = `split`, naming = every region in `tapped`,
+recall = `revealed`, equivalence = `placedCount >= targetCount`, paper =
+`folds.length >= targetFolds.length`.
 
 ## Stack
 
@@ -124,7 +143,7 @@ src/
       namingLogic.ts         # regionCount/regionKind/pickPromptKind/evalTap/feedbackMessage (L1–L3)
       coverLogic.ts          # placeQuarter/isCovered/coverStatusText (L4)
       paperLogic.ts          # nextFoldAxis/applyFold/isProven (L5)
-      lessonPersistence.ts   # localStorage snapshot + isManipulativeState guard (schema v5)
+      lessonPersistence.ts   # localStorage snapshot + isManipulativeState guard (schema v7)
       phaseLabel.ts          # LessonPhase → "P1 · introduce" label
       useLessonStateMachine.ts  # state + handleManip + advanceTo (no MC paths)
       useLessonVoice.ts      # speakAri + mute + mount-time voice + resume scroll
@@ -436,12 +455,14 @@ fold pointer math, `@dnd-kit/core` drag in `EquivalenceMaterial`'s
 hammer) but the only fact it pushes upward is the manipulative-kind
 state. The state machine doesn't know or care how the fact was produced.
 
-**Persistence (`SCHEMA_VERSION = 4`).** The four states above all
+**Persistence (`SCHEMA_VERSION = 7`).** The manipulative states above all
 serialize to plain JSON. `isManipulativeState` validates kind + field
 shape before rehydration; older or malformed snapshots are silently
-rejected and the lesson restarts. Bumps so far: 1 → 2 (BlockStudio
-added, since removed), 2 → 3 (naming + equivalence MVP), 3 → 4
-(`paper` added).
+rejected and the lesson restarts. Bumps so far: 1 (initial), 1 → 2
+(BlockStudio added, since removed), 2 → 5 (naming + equivalence + paper
+added; chat / MC / hint / scaffold fields stripped from the snapshot
+shape when those surfaces were retired), 5 → 6 (post-removal refactor of
+the snapshot shape), 6 → 7 (`whole` + `recall` manipulative kinds added).
 
 **Resume repair (`correctedLessonState`).** A correct manipulative
 completion marks the beat done synchronously but defers `advanceTo` to a

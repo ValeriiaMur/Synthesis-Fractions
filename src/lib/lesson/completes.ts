@@ -21,5 +21,8 @@ export function isBeatComplete(beat: Beat, state: ManipulativeState | undefined)
   if (m.kind === 'paper' && state.kind === 'paper') {
     return state.folds.length >= m.targetFolds.length;
   }
+  if (m.kind === 'recall' && state.kind === 'recall') {
+    return state.revealed;
+  }
   return false;
 }
