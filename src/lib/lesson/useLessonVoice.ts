@@ -9,6 +9,7 @@ import {
 import type { Beat } from './types';
 import { stripMarkup } from './stripMarkup';
 import { getVoicePlayer } from '@/lib/voice/voicePlayer';
+import { getAmbientPlayer } from '@/lib/audio/ambientPlayer';
 
 export type UseLessonVoiceResult = {
   /** Defers `voice.speak` through a double-rAF so React commits + paints
@@ -58,10 +59,17 @@ export function useLessonVoice(
     voice.isMuted,
     () => false,
   );
-  const toggleMuted = useCallback(
-    () => voice.setMuted(!voice.isMuted()),
-    [voice],
-  );
+  const toggleMuted = useCallback(() => {
+    const next = !voice.isMuted();
+    voice.setMuted(next);
+    if (next) {
+      // Cut any in-flight line immediately (setMuted alone lets the current
+      // utterance finish), and silence the ambient pad in case it leaked in
+      // from the name-prompt sound check — so one tap silences everything.
+      voice.stop();
+      getAmbientPlayer().setMuted(true);
+    }
+  }, [voice]);
 
   // Capture mount-time values in refs so the effect's empty-deps semantics
   // hold even when the parent re-renders.
@@ -70,6 +78,10 @@ export function useLessonVoice(
 
   useEffect(() => {
     voice.stop();
+    // The lesson is a focus surface — no background music. Pause the
+    // ambient pad in case it's still looping from the name-prompt sound
+    // check; the home page resumes it on return.
+    getAmbientPlayer().pause();
     const idx = initialActiveIdxRef.current;
     const startBeat = initialBeatsRef.current[idx];
     if (!startBeat || typeof window === 'undefined') {
