@@ -32,6 +32,7 @@ const HAMMER_PX = 56;
 
 const HAMMER_ID = 'equivalence-hammer';
 const TRAY_ID = 'equivalence-tray';
+const QUARTER_ID_PREFIX = 'equivalence-quarter-';
 
 export type EquivalenceMaterialProps = {
   readonly config: EquivalenceConfig;
@@ -44,22 +45,20 @@ export type EquivalenceMaterialProps = {
  * Lesson 05 — "fill the whole, then break it."
  *
  * Tray: same width as the WholeMaterial bar (4 quarter-units, no frame).
- * The kid taps quarters from the pile; each tap drops one into the next
- * empty slot. Four placed = the whole fills (data-covered) and the beat
- * completes.
+ * The kid DRAGS quarters from the pile and drops them onto the bar; each
+ * drop fills the next empty slot. Four placed = the whole fills
+ * (data-covered) and the beat completes. A tap alone does nothing — the
+ * interaction is drag-and-drop.
  *
- * Once filled, a square hammer appears. Drag it onto the bar → release
- * over the tray → the chocolate breaks (placedCount → 0, pile refills).
+ * Once filled, a square hammer appears. Drag it onto the bar → the
+ * chocolate breaks (placedCount → 0, pile refills).
  *
- * Drag is @dnd-kit/core with the smooth single-draggable pattern: the
- * live `transform` is applied to the hammer button itself (GPU-composited
- * translate3d, so it glides under the finger) rather than a DragOverlay.
- * A `PointerSensor` with a small distance constraint (no delay) makes the
- * drag pick up immediately on the first move while a plain tap does
- * nothing; `touch-action: none` on the hammer (globals.css) stops the
- * page scrolling out from under a touch-drag. `pointerWithin` collision
- * means the drop is decided by the finger position, not the dragged box.
- * Enter/Space on the focused hammer breaks the bar too (keyboard + tests).
+ * Both the quarters and the hammer are @dnd-kit draggables under one
+ * DndContext; the live `transform` is applied to each so it glides under
+ * the finger (no overlay). `pointerWithin` decides the drop by finger
+ * position over the tray. `onDragEnd` routes by the dragged id: a quarter
+ * places one, the hammer breaks. Enter/Space on a focused piece is the
+ * keyboard fallback (and the test path).
  */
 export function EquivalenceMaterial({
   config,
@@ -85,13 +84,13 @@ export function EquivalenceMaterial({
     [],
   );
 
-  const handleTap = (): void => {
+  const placeOne = useCallback(() => {
     if (disabled) return;
-    getSfxPlayer().play('chocolateSnap');
     const result = placeQuarter({ placedCount: placed }, target);
     if (!result.accepted) return;
+    getSfxPlayer().play('chocolateSnap');
     onChange({ kind: 'equivalence', placedCount: result.newState.placedCount });
-  };
+  }, [disabled, placed, target, onChange]);
 
   const breakIt = useCallback(() => {
     if (disabled) return;
@@ -108,19 +107,22 @@ export function EquivalenceMaterial({
     }, 900);
   }, [disabled, placed, onChange]);
 
-  // One PointerSensor handles mouse + touch + pen. `distance: 8` means the
-  // drag starts as soon as the finger travels 8px (no hold delay → feels
-  // instant), while a stationary tap never starts a drag.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
-      if (event.over?.id === TRAY_ID) breakIt();
+      if (event.over?.id !== TRAY_ID) return;
+      if (String(event.active.id) === HAMMER_ID) breakIt();
+      else placeOne();
     },
-    [breakIt],
+    [breakIt, placeOne],
   );
+
+  const help = covered
+    ? 'drag the hammer onto the bar to break it'
+    : 'drag a quarter onto the bar →';
 
   return (
     <DndContext
@@ -136,16 +138,12 @@ export function EquivalenceMaterial({
             {!covered && (
               <div className="equivalence-pile" aria-label="pile of quarters">
                 {Array.from({ length: pileRemaining }).map((_, i) => (
-                  <button
+                  <QuarterDraggable
                     key={i}
-                    type="button"
-                    className="equivalence-quarter"
-                    aria-label="place quarter on the whole"
-                    onClick={handleTap}
+                    id={`${QUARTER_ID_PREFIX}${i}`}
                     disabled={disabled}
-                  >
-                    <ChocolatePiece size={UNIT_PX} width={UNIT_PX} alt="" />
-                  </button>
+                    onKeyboardPlace={placeOne}
+                  />
                 ))}
               </div>
             )}
@@ -163,12 +161,16 @@ export function EquivalenceMaterial({
         >
           {status}
         </div>
+        <div className="equivalence-help" data-testid="equivalence-help">
+          {help}
+        </div>
       </div>
     </DndContext>
   );
 }
 
-/** Tray = the bar being filled; also the drop target for the hammer. */
+/** Tray = the bar being filled; also the drop target for quarters + the
+ *  hammer. */
 function TrayDroppable({
   target,
   placed,
@@ -206,10 +208,47 @@ function TrayDroppable({
   );
 }
 
+/** A draggable pile quarter. The live drag transform is applied to the
+ *  button so it glides under the finger. Enter/Space places one (keyboard
+ *  fallback + tests). A plain tap does nothing — placement is by drag. */
+function QuarterDraggable({
+  id,
+  disabled,
+  onKeyboardPlace,
+}: {
+  readonly id: string;
+  readonly disabled: boolean;
+  readonly onKeyboardPlace: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id, disabled });
+  const style: CSSProperties | undefined = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 1000 }
+    : undefined;
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={`equivalence-quarter${isDragging ? ' is-dragging' : ''}`}
+      style={style}
+      {...listeners}
+      {...attributes}
+      onKeyDown={(e: KeyboardEvent<HTMLButtonElement>) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        onKeyboardPlace();
+      }}
+      disabled={disabled}
+      aria-label="drag a quarter onto the bar"
+    >
+      <ChocolatePiece size={UNIT_PX} width={UNIT_PX} alt="" />
+    </button>
+  );
+}
+
 /**
- * Hammer button. The live drag `transform` is applied to the button
- * itself via `translate3d` so it glides smoothly under the finger (no
- * overlay, no size-mismatch). Enter/Space breaks the bar without a drag.
+ * Hammer button — same smooth single-draggable pattern. Enter/Space
+ * breaks the bar without a drag.
  */
 function HammerDraggable({
   disabled,
@@ -220,14 +259,9 @@ function HammerDraggable({
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: HAMMER_ID, disabled });
-
   const style: CSSProperties | undefined = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        zIndex: 1000,
-      }
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 1000 }
     : undefined;
-
   return (
     <button
       ref={setNodeRef}

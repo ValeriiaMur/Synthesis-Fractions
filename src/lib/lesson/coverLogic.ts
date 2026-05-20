@@ -48,8 +48,8 @@ export function coverStatusText(
   const remaining = target - state.placedCount;
   if (state.placedCount <= 0) {
     return target === 4
-      ? 'the tray is empty — tap a quarter to start filling the whole.'
-      : 'the half is empty — tap a quarter to start covering it.';
+      ? 'the tray is empty — drag a quarter onto the bar to start filling the whole.'
+      : 'the half is empty — drag a quarter onto the bar to start covering it.';
   }
   if (state.placedCount < target) {
     const noun = state.placedCount === 1 ? 'quarter' : 'quarters';

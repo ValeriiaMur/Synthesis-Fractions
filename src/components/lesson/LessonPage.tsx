@@ -1,6 +1,6 @@
 'use client';
 
-import { createRef, useMemo, type RefObject } from 'react';
+import { createRef, useEffect, useMemo, useRef, type RefObject } from 'react';
 import type { Beat, BeatId, Lesson } from '@/lib/lesson/types';
 import { GridBg } from '@/components/space/GridBg';
 import { TopBar } from './TopBar';
@@ -72,6 +72,21 @@ export function LessonPage({
     return 'locked';
   };
 
+  // When the last beat completes, glide down to the finish section and
+  // center it. Fires once on the locked→done transition (a ref guard
+  // stops it re-running on later re-renders or toggles).
+  const allDone = machine.doneSet.size === beatCount;
+  const outroRef = useRef<HTMLDivElement | null>(null);
+  const scrolledToFinishRef = useRef(false);
+  useEffect(() => {
+    if (!allDone || scrolledToFinishRef.current) return;
+    scrolledToFinishRef.current = true;
+    const id = window.setTimeout(() => {
+      outroRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 450);
+    return () => window.clearTimeout(id);
+  }, [allDone]);
+
   return (
     <div className="lesson-app cosmos-bg">
       {/* Doodles + Stars intentionally absent — /lesson is a focus surface;
@@ -96,9 +111,11 @@ export function LessonPage({
               />
             ))}
 
-            <LessonTrail allDone={machine.doneSet.size === beatCount} />
+            <LessonTrail allDone={allDone} />
 
-            <Outro done={machine.doneSet.size === beatCount} />
+            <div ref={outroRef}>
+              <Outro done={allDone} />
+            </div>
           </div>
         </div>
       </div>

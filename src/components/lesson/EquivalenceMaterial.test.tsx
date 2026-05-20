@@ -19,36 +19,43 @@ function Harness() {
   );
 }
 
+/** The quarters place by drag-and-drop; Enter/Space is the keyboard
+ *  fallback we drive in tests (jsdom can't simulate a dnd-kit pointer
+ *  drag with coordinates). */
+function placeOneViaKeyboard() {
+  fireEvent.keyDown(screen.getAllByLabelText(/drag a quarter onto the bar/i)[0], {
+    key: 'Enter',
+  });
+}
+
 describe('EquivalenceMaterial — fill the whole (target = 4)', () => {
-  it('renders one tray + a pile of quarter buttons', () => {
+  it('renders one tray + a pile of draggable quarters', () => {
     render(<Harness />);
     expect(screen.getByTestId('equivalence-whole')).toBeInTheDocument();
     expect(
-      screen.getAllByLabelText(/place quarter on the whole/i).length,
+      screen.getAllByLabelText(/drag a quarter onto the bar/i).length,
     ).toBeGreaterThan(0);
   });
 
-  it('shows four empty slots before any taps', () => {
+  it('shows four empty slots before any are placed', () => {
     render(<Harness />);
     const slots = screen.getAllByTestId('equivalence-slot');
     expect(slots).toHaveLength(4);
     slots.forEach((s) => expect(s.dataset.filled).toBeUndefined());
   });
 
-  it('first tap: placedCount 0 → 1, slot 0 fills', () => {
+  it('placing one: placedCount 0 → 1, slot 0 fills', () => {
     render(<Harness />);
-    fireEvent.click(screen.getAllByLabelText(/place quarter/i)[0]);
+    placeOneViaKeyboard();
     expect(screen.getByTestId('placed').textContent).toBe('1');
     const slots = screen.getAllByTestId('equivalence-slot');
     expect(slots[0].dataset.filled).toBe('true');
     expect(slots[1].dataset.filled).toBeUndefined();
   });
 
-  it('four taps fill all slots and mark the whole as covered', () => {
+  it('placing four fills all slots and marks the whole as covered', () => {
     render(<Harness />);
-    for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getAllByLabelText(/place quarter/i)[0]);
-    }
+    for (let i = 0; i < 4; i++) placeOneViaKeyboard();
     expect(screen.getByTestId('placed').textContent).toBe('4');
     const slots = screen.getAllByTestId('equivalence-slot');
     slots.forEach((s) => expect(s.dataset.filled).toBe('true'));
@@ -57,22 +64,18 @@ describe('EquivalenceMaterial — fill the whole (target = 4)', () => {
 
   it('shows the hammer once the whole is filled (and hides the pile)', () => {
     render(<Harness />);
-    for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getAllByLabelText(/place quarter/i)[0]);
-    }
+    for (let i = 0; i < 4; i++) placeOneViaKeyboard();
     expect(
       screen.getByLabelText(/drag the hammer onto the bar/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryAllByLabelText(/place quarter/i).length,
+      screen.queryAllByLabelText(/drag a quarter onto the bar/i).length,
     ).toBe(0);
   });
 
   it('hammer activation (Enter) breaks the bar — placedCount resets to 0', () => {
     render(<Harness />);
-    for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getAllByLabelText(/place quarter/i)[0]);
-    }
+    for (let i = 0; i < 4; i++) placeOneViaKeyboard();
     expect(screen.getByTestId('placed').textContent).toBe('4');
     fireEvent.keyDown(screen.getByLabelText(/drag the hammer/i), {
       key: 'Enter',
@@ -80,28 +83,33 @@ describe('EquivalenceMaterial — fill the whole (target = 4)', () => {
     expect(screen.getByTestId('placed').textContent).toBe('0');
     // Pile comes back so the kid can fill again.
     expect(
-      screen.getAllByLabelText(/place quarter/i).length,
+      screen.getAllByLabelText(/drag a quarter onto the bar/i).length,
     ).toBeGreaterThan(0);
   });
 
-  it('shows observational status at every step', () => {
+  it('shows observational status + a drag-and-drop help line at every step', () => {
     render(<Harness />);
     expect(screen.getByTestId('equivalence-status').textContent ?? '').toMatch(
-      /tap a quarter/,
+      /drag a quarter/,
     );
-    fireEvent.click(screen.getAllByLabelText(/place quarter/i)[0]);
+    expect(screen.getByTestId('equivalence-help').textContent ?? '').toMatch(
+      /drag a quarter onto the bar/i,
+    );
+    placeOneViaKeyboard();
     expect(screen.getByTestId('equivalence-status').textContent ?? '').toMatch(
       /3 more/,
     );
-    for (let i = 0; i < 3; i++) {
-      fireEvent.click(screen.getAllByLabelText(/place quarter/i)[0]);
-    }
+    for (let i = 0; i < 3; i++) placeOneViaKeyboard();
     expect(screen.getByTestId('equivalence-status').textContent ?? '').toMatch(
       /four quarters fill the whole/,
     );
+    // Filled → the help line points at the hammer.
+    expect(screen.getByTestId('equivalence-help').textContent ?? '').toMatch(
+      /drag the hammer/i,
+    );
   });
 
-  it('disabled blocks all taps even when not yet covered', () => {
+  it('disabled blocks placing even when not yet covered', () => {
     render(
       <EquivalenceMaterial
         config={config}
@@ -112,8 +120,8 @@ describe('EquivalenceMaterial — fill the whole (target = 4)', () => {
         disabled
       />,
     );
-    const pile = screen.getAllByLabelText(/place quarter/i);
+    const pile = screen.getAllByLabelText(/drag a quarter onto the bar/i);
     pile.forEach((b) => expect(b).toBeDisabled());
-    fireEvent.click(pile[0]);
+    fireEvent.keyDown(pile[0], { key: 'Enter' });
   });
 });

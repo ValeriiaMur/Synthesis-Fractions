@@ -42,9 +42,9 @@ describe('coverLogic (whole = 4 quarters)', () => {
   });
 
   describe('coverStatusText — whole (target = 4)', () => {
-    it('empty: tells the kid to tap a quarter to fill the whole', () => {
+    it('empty: tells the kid to drag a quarter to fill the whole', () => {
       const text = coverStatusText({ placedCount: 0 }, 4);
-      expect(text).toMatch(/tap a quarter/);
+      expect(text).toMatch(/drag a quarter/);
       expect(text).toMatch(/whole/i);
     });
     it('partial: names placed count + remaining', () => {

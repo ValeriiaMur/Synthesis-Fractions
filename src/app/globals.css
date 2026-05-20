@@ -1426,13 +1426,17 @@ a,
   background: transparent;
   border: 0;
   padding: 0;
-  cursor: pointer;
+  cursor: grab;
   line-height: 0;
-  transition: transform 0.2s ease, filter 0.2s ease;
+  /* No `transform` in the transition — dnd-kit drives the live drag via an
+     inline translate3d and animating it would lag the finger. */
+  transition: filter 0.2s ease, box-shadow 0.2s ease;
   /* Match the chocolate's rounded corners so the focus ring traces the
      visible shape and never reads as a sharp rectangle on top of a
      rounded image. */
   border-radius: 14px;
+  /* Lets the PointerSensor own the touch gesture so a drag never scrolls. */
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
@@ -1444,7 +1448,13 @@ a,
   }
 }
 .equivalence-quarter:active:not(:disabled) {
-  transform: scale(0.96);
+  cursor: grabbing;
+}
+/* Drag lift — no `transform` (dnd-kit owns it); brightness + shadow only. */
+.equivalence-quarter.is-dragging {
+  cursor: grabbing;
+  filter: brightness(1.1);
+  box-shadow: 0 18px 32px -10px rgba(0, 0, 0, 0.6);
 }
 .equivalence-quarter:focus-visible {
   outline: 2px solid var(--blue);
@@ -1472,6 +1482,14 @@ a,
   color: var(--ink-soft);
   text-align: center;
   transition: color 0.3s ease;
+}
+.equivalence-help {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-align: center;
 }
 .equivalence-status.is-covered {
   color: var(--green);
@@ -1672,16 +1690,13 @@ a,
   border-radius: 3px;
 }
 
-/* The big "1" overlay shown at folds === 0. */
+/* The "1" overlay shown at folds === 0 — a white-on-blue chip matching
+   the ½ / ¼ fraction labels (same blue, white text, rounded). */
 .paper-big-num {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: var(--font-work-sans), "Work Sans", sans-serif;
-  font-weight: 200;
-  color: #1a0f04;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.45);
   pointer-events: none;
   z-index: 5;
   font-variant-numeric: tabular-nums;
@@ -1689,8 +1704,12 @@ a,
     opacity 0.35s ease,
     transform 0.35s ease;
 }
-.paper-big-num span {
-  font-size: clamp(110px, 18vmin, 220px);
+/* The whole "1" reuses the .paper-frac chip (white-on-blue, same as the
+   ½ / ¼ labels); we only set its size here. */
+.paper-frac--whole {
+  font-size: clamp(48px, 8vmin, 80px);
+  font-weight: 400;
+  padding: 0.18em 0.44em;
 }
 
 /* The dashed drop zone over the target quadrant. */
