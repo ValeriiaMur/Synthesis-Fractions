@@ -1,26 +1,26 @@
 export type BeatId =
-  | 'chocolate_intro'
-  | 'chocolate_check'
-  | 'pizza_explore'
-  | 'pizza_check'
-  | 'paper_fold_final'
-  | 'fraction_box_explore';
+  | 'whole_intro'
+  | 'name_half'
+  | 'name_quarter'
+  | 'mix_half_quarter'
+  | 'equiv_half_two_quarters'
+  | 'equiv_paper_check';
 
-export type LessonPhase =
-  | 'period_1_introduce'
-  | 'period_2_recognize'
-  | 'period_3_recall';
+export type LessonPhase = 'period_1_introduce' | 'period_2_recognize' | 'period_3_recall';
 
-export type ChocolateBarConfig = {
-  readonly kind: 'chocolate';
-  readonly totalPieces: 4;
-  readonly referenceFraction: { readonly numerator: 1; readonly denominator: 2 };
+export type WholeConfig = {
+  readonly kind: 'whole';
 };
 
-export type PizzaConfig = {
-  readonly kind: 'pizza';
-  readonly initialSlices: 2;
-  readonly targetSlices: 4;
+export type NamingConfig = {
+  readonly kind: 'naming';
+  readonly fractions: readonly ('half' | 'quarter')[];
+  readonly masteryStreak: number;
+};
+
+export type EquivalenceConfig = {
+  readonly kind: 'equivalence';
+  readonly targetCount: 2;
 };
 
 export type PaperConfig = {
@@ -28,164 +28,36 @@ export type PaperConfig = {
   readonly targetFolds: readonly ('horizontal' | 'vertical')[];
 };
 
-export type FractionBoxPaletteEntry = {
-  readonly num: 1;
-  readonly den: number;
-};
-
-export type FractionBoxConfig = {
-  readonly kind: 'fractionbox';
-  /** Unit fractions available in the palette. */
-  readonly palette: readonly FractionBoxPaletteEntry[];
-  /** Minimum number of distinct full-fill combinations required to complete. */
-  readonly minCombos: number;
-};
-
-export type BlockStudioStepId = 'play' | 'compare' | 'quest';
-export type BlockStudioQuestId = 'q1' | 'q2' | 'q3';
-
-export type BlockStudioConfig = {
-  readonly kind: 'blockstudio';
-  /** Available unit fractions in the palette. */
-  readonly palette: readonly FractionBoxPaletteEntry[];
-  /** Step ids to include. Default ['play','compare','quest']. */
-  readonly steps: readonly BlockStudioStepId[];
-  /** Quest ids to include, in order. */
-  readonly quests: readonly BlockStudioQuestId[];
-};
-
 export type ManipulativeConfig =
-  | ChocolateBarConfig
-  | PizzaConfig
-  | PaperConfig
-  | FractionBoxConfig
-  | BlockStudioConfig;
+  | WholeConfig
+  | NamingConfig
+  | EquivalenceConfig
+  | PaperConfig;
 
-export type MCOption = {
-  readonly id: string;
-  readonly label: string;
-};
-
-/** A two-option scaffolded version of the MC, offered after N wrongs.
- *  Authored, not LLM-generated. The `correctOptionId` must reference an
- *  option in `options`; the other option is the chosen distractor. */
-export type ScaffoldedMC = {
-  readonly question: string;
-  readonly options: readonly [MCOption, MCOption];
-  readonly correctOptionId: string;
-};
-
-export type MCConfig = {
-  readonly question: string;
-  readonly options: readonly MCOption[];
-  readonly correctOptionId: string;
-  /** Escalating hints indexed by 0-based attempt number. The last entry
-   *  is used for any attempt beyond its index — hints don't run out. */
-  readonly canonicalHints: readonly string[];
-  /** Optional per-wrong-option hint. When the kid picks a specific wrong
-   *  option, this takes precedence over the attempt-indexed hint. */
-  readonly hintByWrongOption?: Readonly<Record<string, string>>;
-  /** What the tutor says when the kid picks the correct option. May
-   *  contain `{name}` slot. */
-  readonly correctReply: string;
-  /** Authored 2-option simplified version offered after the kid hits
-   *  the wrong-attempt threshold (default 3). Optional — if absent, the
-   *  scaffold step is skipped and the kid keeps wrestling with the
-   *  full MC (canonical hints continue to escalate). */
-  readonly scaffolded?: ScaffoldedMC;
-};
-
-export type Beat = {
-  readonly id: BeatId;
-  readonly phase: LessonPhase;
-  /** Caps tag shown inside the cell-kind row. */
-  readonly kindLabel: string;
-  /** Prose with inline highlight tokens — {y}…{/y}, {r}{b}{g}…{/r|b|g}. */
-  readonly prose: string;
-  readonly manipulative?: ManipulativeConfig;
-  readonly mc?: MCConfig;
-  readonly reflectionPrompt?: string;
-  /** Short in-world line the tutor speaks when this beat is unlocked
-   *  via an advance from the previous beat. Spliced *before* `prose` in
-   *  the voice queue. May contain `{name}` slot. Omit for beat 0 (the
-   *  intro covers it). */
-  readonly enterLine?: string;
-};
-
-export type Lesson = {
-  readonly id: 'fraction-equivalence-v1';
-  readonly beats: readonly Beat[];
-};
-
-export type BeatStatus = 'locked' | 'active' | 'done' | 'completed';
-
-export type ChocolateState = {
-  readonly kind: 'chocolate';
-  readonly piecesOnReference: number;
-};
-
-export type PizzaState = {
-  readonly kind: 'pizza';
-  readonly sliceCount: number;
-};
-
+export type WholeState = { readonly kind: 'whole'; readonly split: boolean };
+export type NamingState = { readonly kind: 'naming'; readonly streak: number };
+export type EquivalenceState = { readonly kind: 'equivalence'; readonly placedCount: number };
 export type PaperState = {
   readonly kind: 'paper';
   readonly folds: readonly ('horizontal' | 'vertical')[];
 };
-
-export type FractionBoxBar = {
-  readonly id: string;
-  readonly num: number;
-  readonly den: number;
-  readonly color: string;
-};
-
-export type FractionBoxState = {
-  readonly kind: 'fractionbox';
-  /** Bars currently in the workspace, left-to-right. */
-  readonly bars: readonly FractionBoxBar[];
-  /** Count of unique combinations the student has built that sum to 1. */
-  readonly combos: number;
-};
-
-export type BlockStudioRailSnapshot = {
-  readonly id: string;
-  readonly bars: readonly FractionBoxBar[];
-};
-
-export type BlockStudioState = {
-  readonly kind: 'blockstudio';
-  readonly stepIdx: number;
-  readonly questIdx: number;
-  readonly maxStepReached: number;
-  readonly rails: readonly BlockStudioRailSnapshot[];
-  readonly questsDone: number;
-  readonly completed: boolean;
-};
-
 export type ManipulativeState =
-  | ChocolateState
-  | PizzaState
-  | PaperState
-  | FractionBoxState
-  | BlockStudioState;
+  | WholeState
+  | NamingState
+  | EquivalenceState
+  | PaperState;
 
-export type LessonState = {
-  readonly currentBeatId: BeatId;
-  readonly beatHistory: readonly BeatId[];
-  readonly beatStatus: Readonly<Record<BeatId, BeatStatus>>;
-  readonly mcSelections: Readonly<Partial<Record<BeatId, string>>>;
-  readonly hintAttempts: Readonly<Partial<Record<BeatId, number>>>;
-  readonly manipulativeStates: Readonly<Partial<Record<BeatId, ManipulativeState>>>;
+export type Beat = {
+  readonly id: BeatId;
+  readonly phase: LessonPhase;
+  readonly kindLabel: string;
+  readonly prose: string;
+  readonly manipulative: ManipulativeConfig;
 };
 
-export type MCValidation = {
-  readonly correct: boolean;
-  readonly correctOptionId: string;
+export type Lesson = {
+  readonly id: 'fractions-naming-v1';
+  readonly beats: readonly Beat[];
 };
 
-export type ManipulativeValidation = {
-  readonly correct: boolean;
-  readonly reason?: string;
-};
+export type BeatStatus = 'locked' | 'active' | 'done' | 'completed';

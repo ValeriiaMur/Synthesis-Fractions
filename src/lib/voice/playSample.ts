@@ -4,6 +4,8 @@
 
 import { fetchTTS } from './ttsClient';
 
+export { SAMPLE_GREETING } from './sampleGreeting';
+
 /** Plays a single TTS sample to completion. Resolves when audio ends; rejects
  *  if the fetch fails or the browser blocks playback. */
 export async function playSampleVoice(text: string): Promise<void> {
@@ -20,6 +22,3 @@ export async function playSampleVoice(text: string): Promise<void> {
     URL.revokeObjectURL(url);
   }
 }
-
-/** The greeting the modal plays back. Single source of truth. */
-export const SAMPLE_GREETING = "Hi, I'm Ari — can you hear me?";

@@ -1,14 +1,11 @@
-import type { Beat, ManipulativeState } from '@/lib/lesson/types';
-import { ChocolateBar } from '@/components/manipulatives/ChocolateBar';
-import { PizzaSlicer } from '@/components/manipulatives/PizzaSlicer';
+import type { ManipulativeConfig, ManipulativeState } from '@/lib/lesson/types';
+import { WholeMaterial } from './WholeMaterial';
+import { NamingMaterial } from './NamingMaterial';
+import { EquivalenceMaterial } from './EquivalenceMaterial';
 import { PaperFold } from '@/components/manipulatives/PaperFold';
-import { FractionBox } from '@/components/manipulatives/FractionBox';
-import { BlockStudio } from '@/components/manipulatives/BlockStudio/BlockStudio';
-
-type Manip = NonNullable<Beat['manipulative']>;
 
 export type ManipulativeSlotProps = {
-  readonly manip: Manip;
+  readonly manip: ManipulativeConfig;
   readonly value: ManipulativeState | undefined;
   readonly onChange: (s: ManipulativeState) => void;
   readonly disabled: boolean;
@@ -19,20 +16,21 @@ export function ManipulativeSlot({
   value,
   onChange,
   disabled,
-}: ManipulativeSlotProps): React.ReactElement | null {
-  if (manip.kind === 'chocolate') {
+}: ManipulativeSlotProps): React.ReactElement {
+  if (manip.kind === 'whole') {
     return (
-      <ChocolateBar
-        value={value?.kind === 'chocolate' ? value : undefined}
+      <WholeMaterial
+        value={value?.kind === 'whole' ? value : undefined}
         onChange={onChange}
         disabled={disabled}
       />
     );
   }
-  if (manip.kind === 'pizza') {
+  if (manip.kind === 'naming') {
     return (
-      <PizzaSlicer
-        value={value?.kind === 'pizza' ? value : undefined}
+      <NamingMaterial
+        config={manip}
+        value={value?.kind === 'naming' ? value : undefined}
         onChange={onChange}
         disabled={disabled}
       />
@@ -47,20 +45,10 @@ export function ManipulativeSlot({
       />
     );
   }
-  if (manip.kind === 'blockstudio') {
-    return (
-      <BlockStudio
-        config={manip}
-        value={value?.kind === 'blockstudio' ? value : undefined}
-        onChange={onChange}
-        disabled={disabled}
-      />
-    );
-  }
   return (
-    <FractionBox
+    <EquivalenceMaterial
       config={manip}
-      value={value?.kind === 'fractionbox' ? value : undefined}
+      value={value?.kind === 'equivalence' ? value : undefined}
       onChange={onChange}
       disabled={disabled}
     />

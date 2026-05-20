@@ -1,21 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type {
-  BeatId,
-  ManipulativeState,
-  MCConfig,
-} from './types';
-import type { MCStatus } from '@/components/lesson/MCBlock';
+import type { BeatId, ManipulativeState } from './types';
 import { snapshotLesson, storageKey } from './lessonPersistence';
 
 export type LessonStateForPersistence = {
   readonly activeIdx: number;
   readonly doneSet: ReadonlySet<BeatId>;
-  readonly mcSel: Partial<Record<BeatId, string>>;
-  readonly mcStatus: Partial<Record<BeatId, MCStatus>>;
-  readonly hintAttempts: Partial<Record<BeatId, number>>;
   readonly manipStates: Partial<Record<BeatId, ManipulativeState>>;
-  readonly liveHints: Partial<Record<BeatId, string>>;
-  readonly scaffoldedMC: Partial<Record<BeatId, MCConfig>>;
 };
 
 /**
@@ -24,9 +14,7 @@ export type LessonStateForPersistence = {
  * state lands on disk if the user closes the tab between a React commit
  * and the effect firing.
  *
- * Synchronous write — no rAF batching. The rAF gap used to lose the most
- * recent advance when the user closed the tab in the ~16ms between the
- * state update committing and the rAF callback running.
+ * Synchronous write — no rAF batching.
  */
 export function useLessonPersistence(
   lessonId: string,
@@ -37,25 +25,9 @@ export function useLessonPersistence(
       snapshotLesson(lessonId, {
         activeIdx: state.activeIdx,
         doneIds: Array.from(state.doneSet),
-        mcSel: state.mcSel,
-        mcStatus: state.mcStatus,
-        hintAttempts: state.hintAttempts,
         manipStates: state.manipStates,
-        liveHints: state.liveHints,
-        scaffoldedMC: state.scaffoldedMC,
-        chat: [],
       }),
-    [
-      lessonId,
-      state.activeIdx,
-      state.doneSet,
-      state.mcSel,
-      state.mcStatus,
-      state.hintAttempts,
-      state.manipStates,
-      state.liveHints,
-      state.scaffoldedMC,
-    ],
+    [lessonId, state.activeIdx, state.doneSet, state.manipStates],
   );
 
   useEffect(() => {

@@ -2,10 +2,8 @@
 
 import { createRef, useMemo, type RefObject } from 'react';
 import type { Beat, BeatId, Lesson } from '@/lib/lesson/types';
-import { Stars } from '@/components/space/Stars';
 import { GridBg } from '@/components/space/GridBg';
-import { Doodles } from '@/components/space/Doodles';
-import { TopBar, type ProgressSegmentStatus } from './TopBar';
+import { TopBar } from './TopBar';
 import { Intro } from './Intro';
 import { Outro } from './Outro';
 import { LessonBeatCell } from './LessonBeatCell';
@@ -26,19 +24,17 @@ type CellStatus = 'locked' | 'active' | 'done';
 
 /**
  * Top-level lesson screen. Composition only — state, effects, and
- * branching wiring live in extracted hooks:
+ * voice wiring live in extracted hooks:
  *
- *  - `useLessonStateMachine` — state + handleMC / handleManip / advance
+ *  - `useLessonStateMachine` — state + handleManip / advance
  *  - `useLessonVoice` — speakAri + mute + mount-time voice + resume scroll
  *  - `useLessonPersistence` — localStorage snapshot + beforeunload backstop
  *
- * Layout: full-width notebook. The chat rail was retired in favour of a
- * voice-driven, view-driven experience — each cell is one turn in a
- * vertical chat. See `summary.md` for the full architecture.
+ * Phase 1 of the Montessori rebuild: one material per beat, voice quiet
+ * by default, no MC / hints / celebration bubbles. See montessori-plan.md.
  */
 export function LessonPage({
   lesson,
-  studentName = 'Ben',
   initialState = null,
 }: LessonPageProps) {
   const beats = lesson.beats;
@@ -53,13 +49,11 @@ export function LessonPage({
   const { speakAri, muted, toggleMuted } = useLessonVoice(
     initialActiveIdx,
     beats,
-    studentName,
     cellRefs[initialActiveIdx],
   );
 
   const machine = useLessonStateMachine({
     beats,
-    studentName,
     initialState,
     speakAri,
     cellRefs,
@@ -68,12 +62,7 @@ export function LessonPage({
   useLessonPersistence(lesson.id, {
     activeIdx: machine.activeIdx,
     doneSet: machine.doneSet,
-    mcSel: machine.mcSel,
-    mcStatus: machine.mcStatus,
-    hintAttempts: machine.hintAttempts,
     manipStates: machine.manipStates,
-    liveHints: machine.liveHints,
-    scaffoldedMC: machine.scaffoldedMC,
   });
 
   const statusFor = (idx: number): CellStatus => {
@@ -83,28 +72,18 @@ export function LessonPage({
     return 'locked';
   };
 
-  const progress = useMemo<readonly ProgressSegmentStatus[]>(
-    () =>
-      beats.map((b, i) => {
-        if (machine.doneSet.has(b.id)) return 'done';
-        if (i === machine.activeIdx) return 'active';
-        return 'idle';
-      }),
-    [beats, machine.activeIdx, machine.doneSet],
-  );
-
   return (
     <div className="lesson-app cosmos-bg">
-      <Stars count={120} />
+      {/* Doodles + Stars intentionally absent — /lesson is a focus surface;
+          the home page keeps the cosmos decoration, the lesson does not. */}
       <GridBg />
-      <Doodles />
 
-      <TopBar progress={progress} muted={muted} onToggleSound={toggleMuted} />
+      <TopBar muted={muted} onToggleSound={toggleMuted} />
 
       <div className="stage">
         <div className="notebook">
           <div className="notebook-inner">
-            <Intro studentName={studentName} />
+            <Intro />
 
             {beats.map((beat: Beat, idx: number) => (
               <LessonBeatCell
@@ -114,17 +93,8 @@ export function LessonPage({
                 status={statusFor(idx)}
                 anchorRef={cellRefs[idx]}
                 manipState={machine.manipStates[beat.id as BeatId]}
-                liveMC={machine.liveMCFor(beat)}
-                mcSel={machine.mcSel[beat.id as BeatId]}
-                mcStatus={machine.mcStatus[beat.id as BeatId] ?? 'idle'}
-                liveHint={machine.liveHints[beat.id as BeatId]}
-                hintAttempts={machine.hintAttempts[beat.id as BeatId] ?? 1}
-                isScaffolded={!!machine.scaffoldedMC[beat.id as BeatId]}
-                showUnlockBanner={
-                  idx > 0 && machine.unlockedBanners.has(beat.id)
-                }
+                showUnlockBanner={idx > 0 && idx === machine.activeIdx}
                 onManipChange={(s) => machine.handleManip(idx, s)}
-                onMCAnswer={(opt) => machine.handleMC(idx, opt)}
               />
             ))}
 

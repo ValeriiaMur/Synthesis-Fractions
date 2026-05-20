@@ -8,44 +8,52 @@ Forward-looking roadmap (Phase 1 → Phase 2 → Phase 3, what gets built when):
 
 ## What this app is
 
-A six-beat fraction-equivalence lesson (½ = ²⁄₄) for a 7–10 year old on an
-iPad, framed as a cosmos delivery story ("the Spirit run"), plus a
-"How It Works" one-pager that walks adult viewers through the eight
-Montessori principles behind it.
+A five-beat **naming-first** fraction lesson for a 6–8 year old on an iPad,
+plus a "How It Works" one-pager that walks adult viewers through the eight
+Montessori principles behind it. The lesson teaches *what one half is* and
+*what one quarter is* before it asks the kid to recognize that one half is
+the same as two quarters. See [montessori-plan.md](montessori-plan.md) for
+the cognitive-load reasoning (the Hinten et al. 2025 meta-analysis on
+fantastical content in young-child media).
 
 **Fully scripted, no LLM.** Per the 1-week challenge brief, the tutor's
-dialogue is scripted with simple branching logic — no LLM-based agent.
-Every line the tutor speaks lives in [`lessonData.ts`](src/lib/lesson/lessonData.ts):
-beat prose, MC questions, per-wrong-option hints, escalating canonical
-hints, scaffolded 2-option variants for stuck cells, in-world transition
-lines, and celebration replies. Branching (yes/no on MC correctness,
-which hint to play, when to scaffold, where to advance) is a pure module
-[`branching.ts`](src/lib/lesson/branching.ts) — fully unit-tested, no
-network, no async. ElevenLabs TTS narrates the authored lines so Ari
-sounds warm without being stochastic.
+dialogue is scripted — no LLM agent. Each beat carries one short prose line
+authored in [`lessonData.ts`](src/lib/lesson/lessonData.ts). Voice is *quiet
+by default*: ElevenLabs TTS plays the beat's prose on entry, and that's it.
+No celebration lines, no per-wrong hints, no scaffolded MC variants — the
+material itself is the feedback (Montessori control-of-error).
 
 Two UI routes, one visual system (cosmos / space palette in
 [globals.css](src/app/globals.css)):
 
 - **`/` — `HowItWorksPage`** — full-bleed scrollytelling marketing page.
-- **`/lesson` — `LessonPage`** — six-beat lesson; full-width notebook
-  (chocolate ration → moon-pizza → star-map → warp-drive Block Studio).
-  Goes through a `NamePrompt` first so the student's name is captured
-  before the lesson starts. There is no chat rail — **each cell IS one
-  turn of a vertical chat**: `<Prose>` (Ari speaks) → manipulative / MC
-  (student responds) → `<StudentEcho>` (right-aligned mirror of the
-  response) → `<HintBubble>` / `<CelebrationBubble>` (Ari reacts) → next
-  cell unlocks. This satisfies the brief's "chat-style interface"
-  requirement using the notebook layout rather than a side rail.
-  The 6th beat (`fraction_box_explore`) ships as **Block Studio** — a
-  guided 1-2-3 multi-rail puzzle; the older single-row `FractionBox`
-  manipulative is still on disk but no longer wired into any beat.
+- **`/lesson` — `LessonPage`** — five-beat lesson; full-width notebook.
+  Goes through a `NamePrompt` first (the click satisfies the browser's
+  autoplay-gesture requirement so the lesson can speak its prose).
 
-**Branching contract.** Every tutor decision (which hint, when to
-scaffold, which transition line, which celebration) is a pure call into
-`branching.ts`. No async, no network, no race conditions. State lives in
-React (`LessonPage`) and on disk (`lessonPersistence.ts`); branching.ts
-is the rulebook applied to that state.
+The five beats:
+
+| # | Beat id                    | Concept                        | Material                                                              |
+|---|----------------------------|--------------------------------|-----------------------------------------------------------------------|
+| 1 | `name_half`                | Period 1 — introduce ½         | Chocolate bar, 2 tap regions                                          |
+| 2 | `name_quarter`             | Period 1 — introduce ¼         | Chocolate bar, 4 tap regions                                          |
+| 3 | `mix_half_quarter`         | Period 2 — recognize ½ vs ¼    | Mixed mat (1 half tile + 4 quarters) with a cycling "tap the X" label |
+| 4 | `equiv_half_two_quarters`  | Period 3 — ½ = ²⁄₄ (recall)    | Chocolate tap-to-cover (half-frame + 2 slots + a pile of quarters)    |
+| 5 | `equiv_paper_check`        | Period 3 — *transfer* check    | Paper-fold (square, fold twice = proof)                               |
+
+Beats 1–4 use the **same chocolate material** (cognitive coherence — one
+visual schema across naming → equivalence; the chocolate art is a single
+PNG at `public/images/chocolate.png` rendered through `ChocolatePiece`).
+Beat 5 swaps to paper-fold as a transfer check: the kid has proved the
+equivalence on chocolate; can they recognize it in a new representation?
+Two folds → done.
+
+**Decision contract.** There is no `branching.ts` anymore — the active
+lesson has no branching to do. State lives in React (`LessonPage`) and on
+disk (`lessonPersistence.ts`); the only "rule" is `isBeatComplete` in
+[`completes.ts`](src/lib/lesson/completes.ts), a pure dispatch on the
+manipulative kind: naming = `streak >= masteryStreak`, equivalence =
+`placedCount >= targetCount`, paper = `folds.length >= targetFolds.length`.
 
 ## Stack
 
@@ -69,7 +77,7 @@ is the rulebook applied to that state.
 
 | Var                    | Required? | Used for                                                  |
 | ---------------------- | --------- | --------------------------------------------------------- |
-| `ELEVENLABS_API_KEY`   | optional  | Server-side TTS at `/api/tts`. Also used (offline, one-off) to generate `public/audio/ambient.mp3` for the home page pad. Without it the lesson plays silent — all tutor text is still on screen. |
+| `ELEVENLABS_API_KEY`   | optional at runtime, required to (re)bake voice | At runtime: server-side TTS at `/api/tts` (fallback for un-baked lines only). Build-time: read by `npm run bake:voice` to generate `public/audio/voice/*.mp3`, and used (offline, one-off) to generate `public/audio/ambient.mp3`. Without it the lesson plays silent for any line not already in the baked manifest — tutor text is still on screen. |
 
 When `ELEVENLABS_API_KEY` is absent `/api/tts` returns 500 and the voice
 player silently no-ops; the lesson stays fully playable as a silent
@@ -87,22 +95,17 @@ src/
   components/
     space/                   # Stars, GridBg, Doodles (+ 9 doodle icons)
     manipulatives/
-      ChocolateBar.tsx, PizzaSlicer.tsx, PaperFold.tsx
-      FractionBox.tsx        # single-row Lego puzzle — unwired (superseded by BlockStudio)
-      BlockStudio/           # 6th-beat guided 1-2-3 multi-rail manipulative
-        BlockStudio.tsx, BlockStudioRail.tsx, BlockStudioPalette.tsx,
-        BlockStudioInspector.tsx, BlockStudioStepper.tsx,
-        BlockStudioStepIntro.tsx, BlockStudioCelebration.tsx,
-        BlockStudioToast.tsx, blockStudioLogic.ts (+ test), types.ts
-      LegoBrick, PaletteBrick, DragGhostBrick, StudRow, Plate, FracInline
-      Caption, Fraction, shade
+      ChocolatePiece.tsx     # shared chocolate-image visual (PNG, used by all chocolate beats)
+      PaperFold.tsx          # L5 transfer check: drag a corner to fold; 2 folds = done
+      paper/                 # Paper, Quad, QuadLabels, PaperFrac, PaperStars, WholeNumber
     lesson/
-      LessonPage.tsx         # ~130 lines — composition only, wires the hooks below
-      LessonBeatCell.tsx     # per-beat cell (prose + manipulative + MC + bubbles)
-      ManipulativeSlot.tsx   # dispatch by manipulative.kind → ChocolateBar / Pizza / Paper / BlockStudio / FractionBox
-      NamePrompt.tsx         # student-name capture, persists to localStorage
-      Cell, Prose, MCBlock, StudentEcho
-      HintBubble, CelebrationBubble
+      LessonPage.tsx         # composition only, wires the hooks below
+      LessonBeatCell.tsx     # per-beat cell (prose + manipulative slot)
+      ManipulativeSlot.tsx   # dispatch by manipulative.kind → Naming / Equivalence / PaperFold
+      NamingMaterial.tsx     # L1–L3 tap-to-name (chocolate bar / mixed mat)
+      EquivalenceMaterial.tsx# L4 tap-to-cover (half-frame + slots + chocolate pile)
+      NamePrompt.tsx         # autoplay-gesture capture; name stored in localStorage
+      Cell, Prose
       Intro, Outro, ResumePrompt
       TopBar
       Icon* (Sound, ArrowLeft)
@@ -113,25 +116,27 @@ src/
       demos/ (DemoFrame, OrderToggle, TrayItem, FauxCell + 8 Demo* files)
   lib/
     lesson/
-      types.ts               # Beat, MCConfig, ManipulativeConfig (incl. FractionBox), LessonState
-      lessonData.ts          # 6 beats with story-fied prose + highlight tokens
-      branching.ts           # pure rulebook — reactToMC / shouldScaffold / advance
-      validators.ts          # validateMC / validateManipulative (all 4 kinds)
-      lessonPersistence.ts   # localStorage snapshot + isManipulativeState guard
+      types.ts               # Beat, ManipulativeConfig (Naming|Equivalence|Paper), states
+      lessonData.ts          # 5 beats — naming-first, chocolate throughline, paper-fold check
+      completes.ts           # isBeatComplete — pure predicate over (Beat, ManipulativeState)
+      namingLogic.ts         # regionCount/regionKind/pickPromptKind/evalTap (L1–L3)
+      coverLogic.ts          # placeQuarter/isCovered (L4)
+      paperLogic.ts          # nextFoldAxis/applyFold/isProven (L5)
+      lessonPersistence.ts   # localStorage snapshot + isManipulativeState guard (schema v4)
       phaseLabel.ts          # LessonPhase → "P1 · introduce" label
-      useLessonStateMachine.ts  # state + handleMC / handleManip / advanceTo
+      useLessonStateMachine.ts  # state + handleManip + advanceTo (no MC paths)
       useLessonVoice.ts      # speakAri + mute + mount-time voice + resume scroll
       useLessonPersistence.ts   # snapshot effect + beforeunload backstop
-      stripMarkup.ts, completes.ts, fractions.ts, titleCaseName.ts
-      manipSummary.ts        # short label for each manipulative state
+      stripMarkup.ts, titleCaseName.ts
       useReveal.ts, useScrollProgress.ts
     audio/
       ambientPlayer.ts       # home-page ambient pad singleton
     voice/
       elevenLabsClient.ts    # server-side ElevenLabs TTS wrapper (Rachel, eleven_flash_v2_5)
-      ttsClient.ts           # client fetch + in-memory cache (text → Blob)
+      ttsClient.ts           # client fetch — manifest lookup → static MP3, else /api/tts
       voicePlayer.ts         # singleton queue + mute, factory + getVoicePlayer()
       playSample.ts          # one-off audio preview for the name-modal sound check
+      sampleGreeting.ts      # SAMPLE_GREETING constant — shared by playSample + bake script
   hooks/
     useParallaxDoodles.ts, useElementProgress.ts,
     useActivePrinciple.ts, useSlideDrift.ts
@@ -141,69 +146,53 @@ Tests sit next to the component they cover (`*.test.tsx` / `*.test.ts`).
 Vitest picks up `src/**/*.{test,spec}.{ts,tsx}` per
 [`vitest.config.mts`](vitest.config.mts).
 
-## Branching ([`branching.ts`](src/lib/lesson/branching.ts))
+## Decision contract ([`completes.ts`](src/lib/lesson/completes.ts))
 
-The scripted tutor's "intelligence" is one pure module + one data table.
-No graph, no agent, no async, no race conditions.
+The lesson has no branching — every cell has exactly one path forward:
+work the material until it accepts the action. The whole "tutor
+intelligence" collapses to one pure predicate:
 
 ```
-              ┌─────────────────────────────────────┐
-              │ kid clicks an MC option / completes │
-              │ a manipulative                       │
-              └─────────────────┬───────────────────┘
-                                │
-                                ▼
-                      reactToMC(beat, optionId,
-                                prevAttempts, name)
-                                │
-                ┌───────────────┴────────────────┐
-                ▼                                ▼
-        kind: 'correct'                    kind: 'wrong'
-        line: correctReply                 line: per-option hint
-        nextBeatId                              ?? attempt-indexed
-        transitionLine                          canonical
-                                           shouldScaffold
+isBeatComplete(beat, state) →
+  beat.kind === 'naming'      ? state.streak       >= masteryStreak
+  beat.kind === 'equivalence' ? state.placedCount  >= targetCount
+  beat.kind === 'paper'       ? state.folds.length >= targetFolds.length
+  : false
 ```
 
-| Decision                  | Source of truth                                |
-| ------------------------- | ---------------------------------------------- |
-| What does Ari say on right? | `beat.mc.correctReply` (authored)              |
-| Which beat is next?       | `lesson.beats[idx + 1]?.id`                    |
-| In-world transition line? | `nextBeat.enterLine`, name-interpolated        |
-| What does Ari say on wrong? | `mc.hintByWrongOption[optionId]` if authored, otherwise `mc.canonicalHints[attempt]` (clamped at last entry) |
-| When to scaffold?         | `prevAttempts + 1 >= SCAFFOLD_THRESHOLD (3)` AND `mc.scaffolded` is authored |
-| Which scaffold to swap?   | `beat.mc.scaffolded` (authored 2-option variant) |
+Each manipulative also has its own pure-logic module — they're not part
+of `completes.ts` but they're the same shape (synchronous, no fetch, no
+React imports, unit-tested in isolation):
 
-`{name}` slots in `correctReply` / `enterLine` are interpolated via
-`interpolate(template, { name })`. The whole module is 17 tests
-([branching.test.ts](src/lib/lesson/branching.test.ts)) — no mocking,
-no async, no setup.
+| Module            | Lessons | Exports                                                |
+| ----------------- | ------- | ------------------------------------------------------ |
+| `namingLogic.ts`  | L1–L3   | `regionCount`, `regionKind`, `pickPromptKind`, `evalTap` |
+| `coverLogic.ts`   | L4      | `placeQuarter`, `isCovered`                            |
+| `paperLogic.ts`   | L5      | `nextFoldAxis`, `applyFold`, `isProven`                |
+
+Wrong actions (tapping the wrong region in NamingMaterial, dropping
+extra quarters once the half is covered) are *silently rejected* by these
+helpers — no streak penalty, no error sound, no UI scold. The absence of
+the expected response IS the feedback (Montessori control-of-error).
 
 ### Retired layers
 
-Two earlier surfaces were removed entirely once it was clear nothing in
-the active lesson depended on them:
+Earlier surfaces removed once nothing in the active lesson depended on
+them:
 
-- **LangGraph + LLM agent** — `src/lib/agent/` (StateGraph + 4 task
-  clients + prompts) and `src/app/api/agent/` (5 API routes: hint,
-  classify-reflection, scaffold-mc, advance, SSE chat stream). Deleted.
-- **Chat rail UI** — `ChatRail`, `ChatMessage`, `QuickReply`,
-  `TypingDots`, `JumpButton`, plus the `IconArrowDown` / `IconPause` /
-  `IconSend` icons that only those components used. Also
-  `aiReplyTo.ts` (the deterministic chat-fallback the rail consumed).
-  Deleted.
+- **LangGraph + LLM agent** — `src/lib/agent/` (StateGraph + task clients
+  + prompts) and `src/app/api/agent/` (5 API routes). Deleted.
+- **Chat rail UI** — `ChatRail`, `ChatMessage`, `QuickReply`, `TypingDots`,
+  `JumpButton`, `aiReplyTo.ts`. Deleted.
+- **`branching.ts` + `validators.ts`** — the old MC/hint/scaffold
+  decision module and its companion validators. Deleted along with
+  `MCBlock`, `HintBubble`, `CelebrationBubble`.
+- **Six-beat story lesson** — Spirit-run narrative, BlockStudio,
+  PizzaSlicer, FractionBox, Lego primitives, `fractions.ts`,
+  `manipSummary.ts`. Deleted.
 
-The lesson now drives Ari through voice + inline cell bubbles only —
-there is no streaming chat surface to maintain.
-
-The `FractionBox` manipulative is still on disk: `LessonPage` keeps a
-fallback render branch for `kind: 'fractionbox'` configs and the
-`FractionBoxConfig` / `FractionBoxState` types remain in
-`ManipulativeConfig` / `ManipulativeState` unions, but no beat in
-`lessonData.ts` uses `kind: 'fractionbox'`. Deleting it would mean
-trimming those unions + the `lessonPersistence.ts` validator + the
-LessonPage branch; kept as-is because `FractionBoxBar` is the brick type
-BlockStudio is built on, so a clean rename is a separate change.
+The lesson now drives Ari through voice + inline prose only — there is
+no streaming chat surface to maintain and no story metaphor to parse.
 
 ## Voice (ElevenLabs TTS)
 
@@ -219,9 +208,11 @@ voicePlayer  (singleton FIFO queue, mute-aware)
         │  fetchAudio(text)
         ▼
 ttsClient    (in-memory text→Blob cache)
-        │  POST /api/tts { text }
+        │  ① lazy GET /audio/voice/manifest.json  (once per page)
+        │      ├─ hit  → GET /audio/voice/<sha>.mp3   (static, ~instant)
+        │      └─ miss → POST /api/tts { text }       (fallback)
         ▼
-/api/tts route
+/api/tts route (fallback only — un-baked lines)
         │  validate text, read ELEVENLABS_API_KEY
         ▼
 elevenLabsClient.synthesizeSpeech (Rachel · eleven_flash_v2_5)
@@ -229,6 +220,18 @@ elevenLabsClient.synthesizeSpeech (Rachel · eleven_flash_v2_5)
         ▼
 HTMLAudio in voicePlayer plays the Blob URL to completion, then dequeues.
 ```
+
+**Pre-baked tutor lines.** The lesson is fully scripted, so every line Ari
+speaks is generated *once* into `public/audio/voice/<sha>.mp3` plus a
+`manifest.json` that maps the exact spoken text → filename. `ttsClient`
+loads the manifest lazily on the first call; subsequent lookups are
+synchronous against an in-memory copy. Run `npm run bake:voice` whenever
+prose changes — the script skips entries whose hash + file are already on
+disk, so re-runs only pay ElevenLabs for new or edited lines. Lines that
+aren't in the manifest (e.g. a new beat added without re-baking) silently
+fall back to `/api/tts`, so dev never blocks on the bake step. Source of
+truth for baked texts: `lesson.beats[].prose` (stripped of markup) plus
+`SAMPLE_GREETING` from `sampleGreeting.ts`.
 
 Design contract:
 
@@ -245,9 +248,15 @@ Design contract:
 - **Cache by text.** `ttsClient` keeps a module-level
   `Map<text, Promise<Blob>>`. Canonical hints and prose play once per page
   load even when they repeat. Failures aren't cached — a retry can succeed.
+- **Manifest-first lookup.** Same `ttsClient` cache, but every miss first
+  consults `/audio/voice/manifest.json` (lazy-fetched once) and serves a
+  static `<sha>.mp3` when the text is present. The `/api/tts` route is now
+  the un-baked-line fallback — the steady-state lesson never hits
+  ElevenLabs from a learner's browser.
 - **No `_cached`-style 304 dance.** The route sets
   `Cache-Control: private, max-age=86400` so the browser keeps audio across
-  navigations; the in-memory map covers same-page repeats.
+  navigations; the in-memory map covers same-page repeats. The static MP3s
+  get HTTP-level cacheability for free.
 - **No LLM in the voice path.** ElevenLabs failures degrade silently:
   `speak()` swallows fetch + play errors and moves on to the next line.
 - **Reveal-gated `speakAri`.** Every call goes through a double
@@ -255,24 +264,19 @@ Design contract:
   paints first, then audio fetch starts. The voice player itself is FIFO,
   so consecutive `speakAri` calls play in issue order.
 - **View-driven, not chat-driven.** Voice anchors to the *active cell*,
-  not to a chat log. The four emission sites in `LessonPage` are:
+  not to a chat log. The two emission sites in `LessonPage` are:
   1. **Mount.** `voice.stop()` clears any leftover queue and then the
      active beat's prose is queued. Re-entering the route (Home → Lesson)
      always starts on whichever cell the kid is currently on.
-  2. **Wrong MC.** The branching-resolved hint (per-option override or
-     attempt-indexed canonical) is queued. No advance — the kid stays on
-     the cell.
-  3. **Correct MC.** The celebration line is queued; 600ms later
-     `advanceTo` fires.
-  4. **`advanceTo`.** Reads `enterLineFor(nextBeat, name)` from the
-     authored data; if present, queues `speakAri(enterLine)` *then*
-     `speakAri(prose)`; otherwise queues just the prose. Visual order in
-     the notebook (the unlock banner sits above the newly-active cell)
-     matches audio order.
+  2. **`advanceTo`.** When a beat completes, `useLessonStateMachine`
+     fires `advanceTo(next)`, which speaks the next beat's prose. One
+     line, on advance — no celebrations, no hints, no announcements when
+     the half is covered. The material's own visual signal (lift on
+     correct tap, chocolate fills the slot, paper folds) carries the
+     feedback.
 - **Silent during exercise.** While the kid is tinkering with a
-  manipulative or pondering an MC, there is no `speakAri` call. The
-  player drains whatever was already queued (typically the prose) and
-  then sits idle.
+  manipulative there is no `speakAri` call. The player drains whatever
+  was already queued (typically the prose) and then sits idle.
 - **Unmount stops the queue.** Navigating away from the lesson (back
   arrow, browser back) calls `voice.stop()` in the lesson's mount-effect
   cleanup. The currently-playing utterance finishes — `voicePlayer.stop`
@@ -367,106 +371,59 @@ cosmos scene.
   `transform` and `opacity` — compositor-only, no layout or paint per
   frame.
 
-## Lesson state machine (`LessonPage`)
+## Lesson state machine (`LessonPage` + `useLessonStateMachine`)
 
 ```ts
-activeIdx: number;
-doneSet: ReadonlySet<BeatId>;
-mcSel: Partial<Record<BeatId, string>>;
-mcStatus: Partial<Record<BeatId, 'idle'|'wrong'|'correct'>>;
-hintAttempts: Partial<Record<BeatId, number>>;
+activeIdx:   number;                                  // which beat is in focus
+doneSet:     ReadonlySet<BeatId>;                     // which beats have been completed
 manipStates: Partial<Record<BeatId, ManipulativeState>>;
-
-// Branching-driven cell overrides (filled by branching.ts, not LLM)
-liveHints: Partial<Record<BeatId, string>>;        // hint shown in the bubble
-scaffoldedMC: Partial<Record<BeatId, MCConfig>>;   // 2-option swap after 3 wrongs
-
-// View / voice cues
-unlockedBanners: ReadonlySet<BeatId>;              // session-only
+unlockedBanners: ReadonlySet<BeatId>;                 // "▸ cell 02 unlocked" cues (session-only)
 ```
 
-**On wrong MC:** call `reactToMC(beat, optionId, prevAttempts, name)`.
-The returned `line` (per-option hint if authored, else attempt-indexed
-canonical) is stored in `liveHints[beat.id]` and spoken via `speakAri`.
-`hintAttempts[beat.id]` increments. If `reaction.shouldScaffold === true`
-AND `beat.mc.scaffolded` is authored, swap `scaffoldedMC[beat.id]` to the
-2-option variant and clear the kid's selection so they can pick fresh.
+There are no MC / hint / scaffold slots in the state — the lesson is
+material-only. The only event the machine handles is `handleManip(idx,
+state)`:
 
-**On correct MC:** call `reactToMC(...)`. The returned `line` is the
-authored `correctReply` (name-interpolated). Speak it. Mark the beat
-done. If `reaction.nextBeatId` is non-null, fire `advanceTo(next)` on a
-600ms timeout; otherwise (final beat) speak the closing line on a 500ms
-timeout.
+1. Update `manipStates[beat.id]`.
+2. Ask `isBeatComplete(beat, state)`.
+3. If complete and not already done, mark done and `advanceTo(idx + 1)`.
 
 **On advance:** flip `activeIdx`, add the next beat to `unlockedBanners`,
-read `enterLineFor(nextBeat, name)` and speak it (if any), then speak the
-prose. Scroll the new cell into view 250ms after the flip. All
-synchronous — no fetch, no race.
+speak the next beat's prose, scroll the new cell into view 250ms after
+the flip. All synchronous — no fetch, no race.
 
-**Block Studio (the 6th beat).** `fraction_box_explore` carries a
-`manipulative: { kind: 'blockstudio', palette, steps, quests }` config; the
-state machine treats it like any other manipulative — calls `renderManipulative`
-to mount `<BlockStudio>` with `(config, value, onChange, disabled)`. The
-component is self-contained: it owns its 1-2-3 stepper, multi-rail mat,
-quest sub-index, drag/drop, equivalence detection, toast queue, and
-celebration overlay. It publishes a `BlockStudioState` upward on every
-commit — `{ stepIdx, questIdx, maxStepReached, rails, questsDone,
-completed }`. The beat is "done" when `state.completed === true`, which
-`BlockStudio` sets when the final quest celebration fires. Because it's the
-last beat, no `advanceTo` runs after — `LessonPage` just adds it to
-`doneSet` and the `Outro` flips to its done state.
+**The three manipulatives in the slot:**
 
-Behavior shaped by `BlockStudio`:
+- `kind: 'naming'` → `<NamingMaterial>` — chocolate tap regions.
+  Publishes `{ kind:'naming', streak: number }` on every accepted tap;
+  wrong taps don't publish.
+- `kind: 'equivalence'` → `<EquivalenceMaterial>` — half-frame + slots +
+  chocolate pile. Publishes `{ kind:'equivalence', placedCount: number }`
+  bounded by `targetCount`. Extra taps after coverage are no-ops.
+- `kind: 'paper'` → `<PaperFold>` — drag corner to fold. Publishes
+  `{ kind:'paper', folds: readonly ('horizontal'|'vertical')[] }` on each
+  successful fold; capped at two folds.
 
-- **Step 1 (Play):** any palette brick drops on any rail. Ready when
-  total bricks across all rails ≥ 3.
-- **Step 2 (Compare):** entering this step the first time resets to three
-  fresh empty rails. Ready when ≥ 2 rails sum to exactly 1 with *distinct*
-  brick signatures (order-independent `comboKey`).
-- **Step 3 (Quest):** entering resets to two fresh empty rails. Three
-  scripted quests run in sequence: fill any rail to 1 → make ½ without a
-  ½ brick → fill a rail with ≥ 3 distinct brick sizes. The Next button
-  cycles `Next quest →` → `Next quest →` → `Finish lesson`.
-- **Equivalence highlight:** any rails sharing a reduced sum and having
-  at least 2 distinct brick signatures light up with a blue ring and
-  appear in the inspector's "Equivalent rows" card.
-- **Drag/drop:** pointer events, ghost follows cursor, hit-test
-  `[data-rail-id]` bounding boxes with a 12px vertical fudge, reject
-  drops that would exceed 1 (+1e-9 epsilon), dragging from workspace and
-  dropping off any rail removes the brick. `Escape` cancels.
+Each component holds its own UI state (lift animation, prompt-cycling,
+drag/fold pointer math) but the only fact it pushes upward is the
+manipulative-kind state. The state machine doesn't know or care how the
+fact was produced.
 
-All pure logic (step predicates, quest predicates, equivalence-group
-detection, insert-index from midpoints, canPlaceBrick) lives in
-`blockStudioLogic.ts` and is unit-tested in `blockStudioLogic.test.ts`.
-The React surface (component, rail, palette, inspector, stepper, intro
-card, celebration, toast) is intentionally not test-rendered — the user
-explicitly chose "pure logic only" for this lesson.
+**Persistence (`SCHEMA_VERSION = 4`).** The four states above all
+serialize to plain JSON. `isManipulativeState` validates kind + field
+shape before rehydration; older or malformed snapshots are silently
+rejected and the lesson restarts. Bumps so far: 1 → 2 (BlockStudio
+added, since removed), 2 → 3 (naming + equivalence MVP), 3 → 4
+(`paper` added).
 
-Re-skinned to the cosmos palette: chrome uses `--ink` / `--ink-soft` /
-`--ink-mute` / `--line` / `--line-strong`; accents pull `--blue` (active +
-equivalence + hover), `--green` (ready / done / one-whole), `--orange`
-(over-one warning). Bricks keep their bright `PALETTE_COLORS` map
-(`{2:#f06b85, 3:#ffb079, 4:#5b8cff, 6:#5fd897, 8:#b69bff, 12:#7fdce8}`)
-since they are the visual focus. Layout collapses to a single vertical
-stack on portrait/narrow viewports; switches to a three-column grid
-(palette · mat · inspector) at `min-aspect-ratio: 1/1` and ≥ 900 CSS
-pixels wide.
-
-Persistence: because `BlockStudioState` is a new `ManipulativeState`
-shape, `SCHEMA_VERSION` in `lessonPersistence.ts` bumped from 1 → 2; older
-snapshots are silently rejected and the lesson restarts cleanly. The new
-state is validated through `isManipulativeState` (kind === 'blockstudio'
-+ field-shape checks) before re-hydration.
-
-**Resume repair (`correctedLessonState`).** A correct MC answer marks the
-beat done synchronously but defers `advanceTo` by 600ms via `setTimeout`.
-The persistence rAF runs in between — so a refresh / nav-away inside that
-600ms window writes a snapshot whose `activeIdx` still points at a beat
-already in `doneIds`, with the next cell locked. On hydration in
-`/lesson/page.tsx` we run `correctedLessonState(decoded, lesson.beats)`,
-which walks `activeIdx` forward past any contiguous run of done beats
-(clamped at `beats.length - 1`). The learner lands on the right cell
-instead of getting parked on a completed one.
+**Resume repair (`correctedLessonState`).** A correct manipulative
+completion marks the beat done synchronously but defers `advanceTo` to a
+microtask. The persistence rAF can run in between — so a refresh inside
+that window writes a snapshot whose `activeIdx` still points at a beat
+already in `doneIds`. On hydration `/lesson/page.tsx` runs
+`correctedLessonState(decoded, lesson.beats)`, walking `activeIdx`
+forward past any contiguous run of done beats (clamped at
+`beats.length - 1`).
 
 **Mount-voice rAF is cancellable.** The mount voice effect used to call
 `speakAri(prose)`, which defers `voice.speak` through a non-cancellable
@@ -487,15 +444,27 @@ identity doesn't re-fire the publish effect.
 
 ## Why these choices
 
-- **Scripted, not generated.** Every line Ari can say lives in
-  `lessonData.ts`; every decision lives in `branching.ts`. Removes the
-  whole class of LLM failure modes (latency, hallucination, racing
-  responses) and lets the lesson run end-to-end with only ElevenLabs in
-  the network path.
-- **Tests for logic, not pixels.** Every pure helper + every branching
-  rule has unit tests. Manipulatives test their state machines.
-  Visual-only components (Doodles, Hero, the demo set) skip tests this
-  pass.
+- **Scripted, not generated.** Every line the tutor speaks lives in
+  `lessonData.ts`; the only "decision" is the pure `isBeatComplete`
+  predicate. Removes the whole class of LLM failure modes (latency,
+  hallucination, racing responses) and lets the lesson run end-to-end
+  with only ElevenLabs in the network path.
+- **One material across naming → equivalence.** Beats 1–4 all use the
+  same chocolate art (`public/images/chocolate.png` via `ChocolatePiece`).
+  Same visual schema, same tap interaction. Cognitive coherence — the
+  kid doesn't burn working memory parsing a new material per beat.
+- **Paper-fold is a *transfer* check, not a parallel material.** Beat 5
+  swaps to paper because the proof has already been made on chocolate;
+  recognizing the equivalence in a new representation is what makes it
+  durable. One material per *concept*, not per beat.
+- **Material-as-feedback.** No celebration bubbles, no hint bubbles, no
+  scaffolded MC variants. Wrong taps are silent rejections from the
+  logic helpers; right taps animate the material. Adult-voice "look
+  again" copy was deleted with `HintBubble` / `CelebrationBubble`.
+- **Tests for logic, not pixels.** Every pure helper has unit tests
+  (`namingLogic`, `coverLogic`, `paperLogic`, `completes`). Material
+  components have behavior tests (tap → streak, tap → placedCount, fold
+  → folds array) but not visual-snapshot tests.
 - **Stable-ref onChange in every manipulative.** Parents pass a fresh
   inline arrow each render; without the ref the publish effect would
   re-fire every render and spin an infinite loop.
@@ -534,9 +503,9 @@ declarations vary by media query.
 notebook column (the chat rail was retired). Cell gutter narrows from
 80→60px on portrait so the manipulatives breathe on iPad mini portrait.
 
-**TopBar.** The verbose "equivalent fractions · ½ = ²⁄₄" tag shrinks
-letter-spacing at ≤ 900px and is hidden outright at ≤ 560px so the
-progress segments + back/sound buttons stay clear.
+**TopBar.** Back-to-home link + "fractions" lesson tag on the left, mute
+toggle on the right. No progress segments — the lesson is mastery-paced,
+not progress-bar-paced.
 
 **iPad Safari viewport.** `.lesson-app` uses `height: 100dvh` (with a
 `100vh` fallback) so the Safari URL bar collapsing/expanding doesn't push
@@ -577,3 +546,6 @@ title scales smoothly from iPad mini portrait up through desktop.
 - `npm run lint` / `npm run lint:fix` — ESLint (check / auto-fix).
 - `npm test` — Vitest watch mode.
 - `npm run test:run` — Vitest one-shot (for CI / pre-commit).
+- `npm run bake:voice` — regenerate `public/audio/voice/*.mp3` + `manifest.json`
+  from the scripted lesson lines. Skip-if-exists: only re-fetches lines
+  whose text changed. Reads `ELEVENLABS_API_KEY` from `.env`.

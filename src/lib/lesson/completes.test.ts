@@ -1,158 +1,153 @@
 import { describe, it, expect } from 'vitest';
-import { isBeatComplete, lookupHint } from './completes';
+import { isBeatComplete } from './completes';
 import type { Beat } from './types';
 
-const chocolateBeat: Beat = {
-  id: 'chocolate_intro',
+const namingHalfBeat: Beat = {
+  id: 'name_half',
   phase: 'period_1_introduce',
-  kindLabel: 'manipulative — chocolate bar',
-  prose: 'place the pieces',
+  kindLabel: 'one half',
+  prose: 'Tap one half.',
+  manipulative: { kind: 'naming', fractions: ['half'], masteryStreak: 3 },
+};
+
+const namingMixBeat: Beat = {
+  id: 'mix_half_quarter',
+  phase: 'period_2_recognize',
+  kindLabel: 'halves and quarters',
+  prose: 'Tap the half. Then tap the quarter.',
   manipulative: {
-    kind: 'chocolate',
-    totalPieces: 4,
-    referenceFraction: { numerator: 1, denominator: 2 },
+    kind: 'naming',
+    fractions: ['half', 'quarter'],
+    masteryStreak: 4,
   },
 };
 
-const pizzaBeat: Beat = {
-  id: 'pizza_explore',
-  phase: 'period_2_recognize',
-  kindLabel: 'manipulative — pizza',
-  prose: 'slice it',
-  manipulative: { kind: 'pizza', initialSlices: 2, targetSlices: 4 },
+const equivBeat: Beat = {
+  id: 'equiv_half_two_quarters',
+  phase: 'period_3_recall',
+  kindLabel: 'half = two quarters',
+  prose: 'Place quarters on the half until it fits exactly.',
+  manipulative: { kind: 'equivalence', targetCount: 2 },
 };
 
 const paperBeat: Beat = {
-  id: 'paper_fold_final',
+  id: 'equiv_paper_check',
   phase: 'period_3_recall',
-  kindLabel: 'manipulative + check — paper',
-  prose: 'fold it',
+  kindLabel: 'check: half = two quarters',
+  prose: 'Fold the paper. Then fold again.',
   manipulative: { kind: 'paper', targetFolds: ['horizontal', 'vertical'] },
 };
 
-describe('isBeatComplete — chocolate', () => {
-  it('is true when exactly two pieces sit on the reference', () => {
+const wholeBeat: Beat = {
+  id: 'whole_intro',
+  phase: 'period_1_introduce',
+  kindLabel: 'one whole',
+  prose: 'This is one whole. Tap to split it in half.',
+  manipulative: { kind: 'whole' },
+};
+
+describe('isBeatComplete — whole intro', () => {
+  it('is true once the kid has split the whole', () => {
+    expect(isBeatComplete(wholeBeat, { kind: 'whole', split: true })).toBe(true);
+  });
+  it('is false until the split happens', () => {
+    expect(isBeatComplete(wholeBeat, { kind: 'whole', split: false })).toBe(false);
+  });
+  it('is false without state', () => {
+    expect(isBeatComplete(wholeBeat, undefined)).toBe(false);
+  });
+  it('is false when state kind does not match', () => {
     expect(
-      isBeatComplete(chocolateBeat, {
-        kind: 'chocolate',
-        piecesOnReference: 2,
-      }),
+      isBeatComplete(wholeBeat, { kind: 'naming', streak: 5 }),
+    ).toBe(false);
+  });
+});
+
+describe('isBeatComplete — naming', () => {
+  it('is true when streak meets the mastery threshold', () => {
+    expect(
+      isBeatComplete(namingHalfBeat, { kind: 'naming', streak: 3 }),
     ).toBe(true);
   });
 
-  it('is false when fewer or more than two pieces are placed', () => {
+  it('is true once streak exceeds the threshold', () => {
     expect(
-      isBeatComplete(chocolateBeat, {
-        kind: 'chocolate',
-        piecesOnReference: 1,
-      }),
-    ).toBe(false);
+      isBeatComplete(namingHalfBeat, { kind: 'naming', streak: 5 }),
+    ).toBe(true);
+  });
+
+  it('is false below the threshold', () => {
     expect(
-      isBeatComplete(chocolateBeat, {
-        kind: 'chocolate',
-        piecesOnReference: 3,
-      }),
+      isBeatComplete(namingHalfBeat, { kind: 'naming', streak: 2 }),
     ).toBe(false);
   });
 
+  it('respects a custom streak threshold per beat', () => {
+    expect(
+      isBeatComplete(namingMixBeat, { kind: 'naming', streak: 3 }),
+    ).toBe(false);
+    expect(
+      isBeatComplete(namingMixBeat, { kind: 'naming', streak: 4 }),
+    ).toBe(true);
+  });
+
   it('is false without any state', () => {
-    expect(isBeatComplete(chocolateBeat, undefined)).toBe(false);
+    expect(isBeatComplete(namingHalfBeat, undefined)).toBe(false);
   });
 
   it('is false when state kind does not match', () => {
     expect(
-      isBeatComplete(chocolateBeat, { kind: 'pizza', sliceCount: 4 }),
+      isBeatComplete(namingHalfBeat, {
+        kind: 'equivalence',
+        placedCount: 2,
+      }),
     ).toBe(false);
   });
 });
 
-describe('isBeatComplete — pizza', () => {
-  it('is true when slice count hits the target', () => {
-    expect(isBeatComplete(pizzaBeat, { kind: 'pizza', sliceCount: 4 })).toBe(
-      true,
-    );
+describe('isBeatComplete — equivalence', () => {
+  it('is true when placedCount hits the target', () => {
+    expect(
+      isBeatComplete(equivBeat, { kind: 'equivalence', placedCount: 2 }),
+    ).toBe(true);
   });
 
   it('is false short of the target', () => {
-    expect(isBeatComplete(pizzaBeat, { kind: 'pizza', sliceCount: 2 })).toBe(
-      false,
-    );
+    expect(
+      isBeatComplete(equivBeat, { kind: 'equivalence', placedCount: 1 }),
+    ).toBe(false);
+  });
+
+  it('is false when state kind does not match', () => {
+    expect(
+      isBeatComplete(equivBeat, { kind: 'naming', streak: 2 }),
+    ).toBe(false);
   });
 });
 
-describe('isBeatComplete — paper', () => {
-  it('is true once two folds are present, in any order', () => {
+describe('isBeatComplete — paper-fold transfer check', () => {
+  it('is true after both required folds have been made', () => {
     expect(
       isBeatComplete(paperBeat, {
         kind: 'paper',
-        folds: ['vertical', 'horizontal'],
+        folds: ['horizontal', 'vertical'],
       }),
     ).toBe(true);
   });
 
-  it('is false with a single fold', () => {
+  it('is false after only one fold', () => {
     expect(
       isBeatComplete(paperBeat, { kind: 'paper', folds: ['horizontal'] }),
     ).toBe(false);
   });
-});
 
-const fractionBoxBeat: Beat = {
-  id: 'fraction_box_explore',
-  phase: 'period_3_recall',
-  kindLabel: 'manipulative — fraction box',
-  prose: 'build it',
-  manipulative: {
-    kind: 'fractionbox',
-    palette: [
-      { num: 1, den: 2 },
-      { num: 1, den: 4 },
-    ],
-    minCombos: 2,
-  },
-};
-
-describe('isBeatComplete — fractionbox', () => {
-  it('is true at or above minCombos', () => {
-    expect(
-      isBeatComplete(fractionBoxBeat, {
-        kind: 'fractionbox',
-        bars: [],
-        combos: 2,
-      }),
-    ).toBe(true);
+  it('is false with zero folds', () => {
+    expect(isBeatComplete(paperBeat, { kind: 'paper', folds: [] })).toBe(false);
   });
 
-  it('is false below minCombos', () => {
+  it('is false when state kind does not match the manipulative kind', () => {
     expect(
-      isBeatComplete(fractionBoxBeat, {
-        kind: 'fractionbox',
-        bars: [],
-        combos: 1,
-      }),
+      isBeatComplete(paperBeat, { kind: 'equivalence', placedCount: 2 }),
     ).toBe(false);
-  });
-});
-
-describe('lookupHint', () => {
-  const hints = ['first', 'second', 'third'];
-
-  it('returns the nth hint', () => {
-    expect(lookupHint(hints, 0)).toBe('first');
-    expect(lookupHint(hints, 1)).toBe('second');
-    expect(lookupHint(hints, 2)).toBe('third');
-  });
-
-  it('caps at the last hint when the learner runs out', () => {
-    expect(lookupHint(hints, 99)).toBe('third');
-  });
-
-  it('clamps negative attempts to zero', () => {
-    expect(lookupHint(hints, -2)).toBe('first');
-  });
-
-  it('returns null with no hints', () => {
-    expect(lookupHint([], 0)).toBe(null);
-    expect(lookupHint(undefined, 0)).toBe(null);
   });
 });

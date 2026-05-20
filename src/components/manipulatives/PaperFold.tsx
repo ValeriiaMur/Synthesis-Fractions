@@ -115,7 +115,32 @@ function dropStyleFor(folds: FoldCount): CSSProperties | null {
 export function PaperFold({ value, onChange, disabled = false }: PaperFoldProps) {
   const [folds, setFolds] = useState<FoldCount>(() => countFromFolds(value?.folds));
   const [drag, setDrag] = useState<DragState | null>(null);
+  /** True for ~1.5s right after a fold commits. Lets the hint line briefly
+   *  read in success-green ("yes — one fold…") before settling back to the
+   *  observational idle copy. */
+  const [justFolded, setJustFolded] = useState(false);
+  const justFoldedTimerRef = useRef<number | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(
+    () => () => {
+      if (justFoldedTimerRef.current !== null) {
+        window.clearTimeout(justFoldedTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const flashJustFolded = useCallback(() => {
+    if (justFoldedTimerRef.current !== null) {
+      window.clearTimeout(justFoldedTimerRef.current);
+    }
+    setJustFolded(true);
+    justFoldedTimerRef.current = window.setTimeout(() => {
+      setJustFolded(false);
+      justFoldedTimerRef.current = null;
+    }, 1500);
+  }, []);
 
   /* Stable ref for onChange so re-renders in the parent don't loop. */
   const onChangeRef = useRef(onChange);
@@ -175,9 +200,13 @@ export function PaperFold({ value, onChange, disabled = false }: PaperFoldProps)
       if (disabled || !cornerSpec) return;
       if (e.key !== 'Enter' && e.key !== ' ') return;
       e.preventDefault();
-      setFolds((f) => (f < 2 ? ((f + 1) as FoldCount) : f));
+      setFolds((f) => {
+        if (f >= 2) return f;
+        flashJustFolded();
+        return (f + 1) as FoldCount;
+      });
     },
-    [disabled, cornerSpec],
+    [disabled, cornerSpec, flashJustFolded],
   );
 
   /* Window-level pointer listeners drive the live drag + release. The
@@ -194,7 +223,11 @@ export function PaperFold({ value, onChange, disabled = false }: PaperFoldProps)
           ? Math.max(0, Math.min(1, (drag.startY - ev.clientY) / drag.wsHeight))
           : Math.max(0, Math.min(1, (drag.startX - ev.clientX) / drag.wsWidth));
       if (progress > 0.5) {
-        setFolds((f) => (f < 2 ? ((f + 1) as FoldCount) : f));
+        setFolds((f) => {
+          if (f >= 2) return f;
+          flashJustFolded();
+          return (f + 1) as FoldCount;
+        });
       }
       setDrag(null);
     };
@@ -206,7 +239,7 @@ export function PaperFold({ value, onChange, disabled = false }: PaperFoldProps)
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [drag, cornerSpec]);
+  }, [drag, cornerSpec, flashJustFolded]);
 
   const unfold = () => {
     if (disabled) return;
@@ -223,6 +256,10 @@ export function PaperFold({ value, onChange, disabled = false }: PaperFoldProps)
       if (dragProgress < 0.7) return 'Almost there…';
       return 'Release to crease the paper.';
     }
+    if (justFolded && folds === 1)
+      return 'yes — one fold. two halves, one on top of the other.';
+    if (justFolded && folds === 2)
+      return 'yes — two folds. four quarters, and two of them cover one half.';
     if (folds === 0) return cornerSpec?.hint ?? '';
     if (folds === 1)
       return 'One fold. The paper is now in two halves — one half on top of the other.';
@@ -322,7 +359,13 @@ export function PaperFold({ value, onChange, disabled = false }: PaperFoldProps)
         </button>
       </div>
 
-      <div className="paper-hint">{hint}</div>
+      <div
+        className={`paper-hint${justFolded ? ' is-success' : ''}`}
+        role="status"
+        aria-live="polite"
+      >
+        {hint}
+      </div>
     </div>
   );
 }
